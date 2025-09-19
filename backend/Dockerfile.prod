@@ -44,7 +44,7 @@ COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
 
 # Regenerate Prisma client for the correct platform (Debian)
-RUN PRISMA_CLI_BINARY_TARGETS=linux-glibc-openssl-3.0.x npx prisma generate
+RUN PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x npx prisma generate
 
 # Create necessary directories
 RUN mkdir -p logs uploads && \
