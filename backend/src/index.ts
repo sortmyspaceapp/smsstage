@@ -43,6 +43,9 @@ for (const envVar of requiredEnvVars) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for rate limiting and IP detection
+app.set('trust proxy', 1);
+
 // Enhanced security middleware
 app.use(helmet({
   contentSecurityPolicy: {
