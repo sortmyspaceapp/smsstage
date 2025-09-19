@@ -37,6 +37,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built application and other necessary files
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 
 # Create necessary directories
 RUN mkdir -p logs uploads && \
