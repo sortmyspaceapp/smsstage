@@ -1,5 +1,5 @@
 # Multi-stage build for production
-FROM node:18-alpine AS builder
+FROM node:18-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -21,11 +21,16 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:18-slim AS production
+
+# Install required libraries for Prisma
+RUN apt-get update && apt-get install -y \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create app user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN groupadd -g 1001 nodejs && \
+    useradd -r -u 1001 -g nodejs nodejs
 
 # Set working directory
 WORKDIR /app
@@ -37,7 +42,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built application and other necessary files
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+
+# Regenerate Prisma client for the correct platform (Debian)
+RUN PRISMA_CLI_BINARY_TARGETS=linux-glibc-openssl-3.0.x npx prisma generate
 
 # Create necessary directories
 RUN mkdir -p logs uploads && \
