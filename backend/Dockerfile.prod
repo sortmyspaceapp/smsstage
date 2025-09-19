@@ -11,8 +11,8 @@ COPY prisma ./prisma/
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci && npm cache clean --force
 
-# Generate Prisma client
-RUN npx prisma generate
+# Generate Prisma client with correct binary targets
+RUN PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x npx prisma generate
 
 # Copy source code
 COPY . .
@@ -43,8 +43,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
 
-# Regenerate Prisma client for the correct platform (Debian)
-RUN PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x npx prisma generate
+# Prisma client already generated in builder stage with correct binary targets
 
 # Create necessary directories
 RUN mkdir -p logs uploads && \
