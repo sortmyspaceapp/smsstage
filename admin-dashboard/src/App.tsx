@@ -10,7 +10,7 @@ import FloorManagementModal from './components/FloorManagementModal';
 import './App.css';
 
 // Configure axios base URL
-axios.defaults.baseURL = 'http://127.0.0.1:3000';
+axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'https://smsstage.ceartech.com/api';
 
 interface User {
   id: string;
@@ -127,7 +127,7 @@ const App: React.FC = () => {
 
   const fetchUserProfile = async () => {
     try {
-      const response = await axios.get('/api/user/profile');
+      const response = await axios.get('/user/profile');
       setUser(response.data.data.user);
       setIsLoggedIn(true);
     } catch (error) {
@@ -142,7 +142,7 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      const response = await axios.post('/api/auth/login', loginForm);
+      const response = await axios.post('/auth/login', loginForm);
       const { token, user } = response.data.data;
       
       localStorage.setItem('token', token);
@@ -169,7 +169,7 @@ const App: React.FC = () => {
 
   const fetchSpaces = async () => {
     try {
-      const response = await axios.get('/api/spaces/search');
+      const response = await axios.get('/spaces/search');
       setSpaces(response.data.data.spaces);
     } catch (error) {
       console.error('Failed to fetch spaces:', error);
@@ -178,7 +178,7 @@ const App: React.FC = () => {
 
   const fetchMalls = async () => {
     try {
-      const response = await axios.get('/api/malls');
+      const response = await axios.get('/malls');
       setMalls(response.data.data.malls);
     } catch (error) {
       console.error('Failed to fetch malls:', error);
@@ -187,7 +187,7 @@ const App: React.FC = () => {
 
   const fetchCities = async () => {
     try {
-      const response = await axios.get('/api/cities');
+      const response = await axios.get('/cities');
       setCities(response.data.data.cities);
     } catch (error) {
       console.error('Failed to fetch cities:', error);
@@ -202,7 +202,7 @@ const App: React.FC = () => {
   const fetchNotificationCount = async () => {
     try {
       setNotificationRefreshing(true);
-      const response = await axios.get('/api/notifications/count?unreadOnly=true');
+      const response = await axios.get('/notifications/count?unreadOnly=true');
       setUnreadCount(response.data.data.count);
     } catch (error) {
       console.error('Failed to fetch notification count:', error);
@@ -214,7 +214,7 @@ const App: React.FC = () => {
   const fetchNotifications = async () => {
     try {
       setNotificationRefreshing(true);
-      const response = await axios.get('/api/notifications');
+      const response = await axios.get('/notifications');
       setNotifications(response.data.data.notifications);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
@@ -225,7 +225,7 @@ const App: React.FC = () => {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      await axios.patch(`/api/notifications/${notificationId}/read`);
+      await axios.patch(`/notifications/${notificationId}/read`);
       setNotifications(prev => prev.map(notification => 
         notification.id === notificationId ? { ...notification, isRead: true } : notification
       ));
@@ -237,7 +237,7 @@ const App: React.FC = () => {
 
   const markAllAsRead = async () => {
     try {
-      await axios.patch('/api/notifications/read-all');
+      await axios.patch('/notifications/read-all');
       setNotifications(prev => prev.map(notification => ({ ...notification, isRead: true })));
       setUnreadCount(0);
     } catch (error) {

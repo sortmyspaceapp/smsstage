@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Configure axios base URL to point to the backend
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: process.env.REACT_APP_API_URL || 'https://smsstage.ceartech.com/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

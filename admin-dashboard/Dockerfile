@@ -13,6 +13,9 @@ RUN npm ci && npm cache clean --force
 # Copy source code
 COPY . .
 
+# Set environment variables for build
+ENV REACT_APP_API_URL=https://smsstage.ceartech.com/api
+
 # Build the application
 RUN npm run build
 

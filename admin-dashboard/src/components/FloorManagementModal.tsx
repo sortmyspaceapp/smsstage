@@ -44,7 +44,7 @@ const FloorManagementModal: React.FC<FloorManagementModalProps> = ({
       setLoading(true);
       setError(null);
 
-      const response = await axios.post('/api/floors', {
+      const response = await axios.post('/floors', {
         mallId,
         floorNumber: newFloor.floorNumber,
         name: newFloor.name.trim()
@@ -78,7 +78,7 @@ const FloorManagementModal: React.FC<FloorManagementModalProps> = ({
       setLoading(true);
       setError(null);
 
-      const response = await axios.delete(`/api/floors/${floorId}`);
+      const response = await axios.delete(`/floors/${floorId}`);
 
       if (response.data.success) {
         setSuccess('Floor deleted successfully!');

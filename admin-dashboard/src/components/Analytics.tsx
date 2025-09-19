@@ -64,7 +64,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
   const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`/api/activity/analytics?days=${selectedDays}`);
+      const response = await axios.get(`/activity/analytics?days=${selectedDays}`);
       setAnalytics(response.data.data);
     } catch (error) {
       setError('Failed to fetch analytics');

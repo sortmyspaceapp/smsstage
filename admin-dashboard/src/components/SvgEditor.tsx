@@ -50,7 +50,7 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
     try {
       setLoading(true);
       console.log('Loading SVG data for floor:', floorId);
-      const response = await axios.get(`/api/svg/floor/${floorId}`);
+      const response = await axios.get(`/svg/floor/${floorId}`);
       console.log('SVG data response:', response.data);
       setSvgContent(response.data.data.svgContent);
       setSpaces(response.data.data.spaces);
@@ -235,13 +235,13 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
       
       if (selectedSpace) {
         // Update existing space
-        await axios.put(`/api/svg/space/${selectedSpace.id}/assignment`, {
+        await axios.put(`/svg/space/${selectedSpace.id}/assignment`, {
           svgElementId: selectedElement,
           ...spaceForm
         });
       } else {
         // Create new space
-        await axios.post('/api/spaces', {
+        await axios.post('/spaces', {
           floorId,
           svgElementId: selectedElement,
           ...spaceForm
@@ -264,7 +264,7 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
 
     try {
       setLoading(true);
-      await axios.delete(`/api/spaces/${selectedSpace.id}`);
+      await axios.delete(`/spaces/${selectedSpace.id}`);
       await loadSvgData(); // Reload data
       setSelectedSpace(null);
       setSelectedElement(null);

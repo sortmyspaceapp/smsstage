@@ -42,7 +42,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ onClose }) => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/user/all');
+      const response = await axios.get('/user/all');
       setUsers(response.data.data.users);
     } catch (error) {
       setError('Failed to fetch users');
@@ -59,7 +59,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ onClose }) => {
       
       if (editingUser) {
         // Update user
-        await axios.put(`/api/user/${editingUser.id}`, {
+        await axios.put(`/user/${editingUser.id}`, {
           email: formData.email,
           role: formData.role,
           profile: {
@@ -71,7 +71,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ onClose }) => {
         });
       } else {
         // Create user
-        await axios.post('/api/user', {
+        await axios.post('/user', {
           email: formData.email,
           password: formData.password,
           role: formData.role,
@@ -111,7 +111,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ onClose }) => {
     
     try {
       setLoading(true);
-      await axios.delete(`/api/user/${userId}`);
+      await axios.delete(`/user/${userId}`);
       await fetchUsers();
     } catch (error: any) {
       setError(error.response?.data?.error || 'Failed to delete user');
