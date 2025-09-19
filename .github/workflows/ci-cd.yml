@@ -220,7 +220,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Setup server
+      - name: Setup server and deploy
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             # Update system packages
@@ -248,11 +248,8 @@ jobs:
             # Create application directory
             sudo mkdir -p /opt/spacefinder
             sudo chown $USER:$USER /opt/spacefinder
-          EOF
-
-      - name: Deploy application
-        run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            
+            # Navigate to application directory
             cd /opt/spacefinder
             
             # Clone repository if not exists
