@@ -278,17 +278,27 @@ jobs:
               echo "Please update .env.production with your actual values"
             fi
             
+            # Verify environment file exists and has content
+            echo "Environment file status:"
+            ls -la .env.production
+            echo "Environment file content (first 10 lines):"
+            head -10 .env.production
+            
             # Use sudo for docker commands to avoid permission issues
-            sudo docker-compose -f docker-compose.prod.yml pull
+            # Load environment variables explicitly for all docker-compose commands
+            export $(cat .env.production | grep -v '^#' | xargs)
+            
+            # Pull latest images
+            sudo -E docker-compose -f docker-compose.prod.yml pull
             
             # Stop services
-            sudo docker-compose -f docker-compose.prod.yml down
+            sudo -E docker-compose -f docker-compose.prod.yml down
             
             # Start services with new images
-            sudo docker-compose -f docker-compose.prod.yml up -d
+            sudo -E docker-compose -f docker-compose.prod.yml up -d
             
             # Run database migrations
-            sudo docker-compose -f docker-compose.prod.yml exec -T backend npx prisma db push || true
+            sudo -E docker-compose -f docker-compose.prod.yml exec -T backend npx prisma db push || true
             
             # Clean up old images
             sudo docker image prune -f
