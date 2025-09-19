@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: spacefinder-postgres
+    environment:
+      POSTGRES_DB: spacefinder_db
+      POSTGRES_USER: spacefinder_user
+      POSTGRES_PASSWORD: spacefinder_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - spacefinder-network
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: spacefinder-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - spacefinder-network
+
+  # Backend API
+  backend:
+    build: .
+    container_name: spacefinder-backend
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://spacefinder_user:spacefinder_password@postgres:5432/spacefinder_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your-super-secret-jwt-key-here
+      JWT_REFRESH_SECRET: your-super-secret-refresh-key-here
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - spacefinder-network
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  spacefinder-network:
+    driver: bridge

@@ -1,0 +1,432 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  username      String?  @unique
+  passwordHash  String   @map("password_hash")
+  role          UserRole @default(CUSTOMER)
+  isActive      Boolean  @default(true) @map("is_active")
+  emailVerified Boolean  @default(false) @map("email_verified")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  profile       UserProfile?
+  sessions      UserSession[]
+  recentViews   RecentView[]
+  interestedSpaces InterestedSpace[]
+  inquiries     SpaceInquiry[]
+  notifications Notification[]
+  managedMalls  Mall[]
+  mallManager   MallManager?
+  activities    UserActivity[]
+  interestedUserNotifications SpaceInterestNotification[] @relation("InterestedUserNotifications")
+  mallManagerNotifications SpaceInterestNotification[] @relation("MallManagerNotifications")
+
+  @@map("users")
+}
+
+model UserProfile {
+  id          String  @id @default(cuid())
+  userId      String  @unique @map("user_id")
+  firstName   String  @map("first_name")
+  lastName    String  @map("last_name")
+  phone       String?
+  avatarUrl   String? @map("avatar_url")
+  preferences Json?   // UserPreferences JSON
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+// Location and Property Management
+model City {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  state       String
+  country     String   @default("India")
+  coordinates Json?    // { lat: number, lng: number }
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  malls Mall[]
+
+  @@map("cities")
+}
+
+model Sector {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  icon        String?
+  color       String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  malls Mall[]
+
+  @@map("sectors")
+}
+
+model Mall {
+  id          String   @id @default(cuid())
+  name        String
+  cityId      String   @map("city_id")
+  sectorId    String   @map("sector_id")
+  address     String
+  coordinates Json?    // { lat: number, lng: number }
+  rating      Float    @default(0)
+  images      String[] // Array of image URLs
+  managerId   String?  @map("manager_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  city     City     @relation(fields: [cityId], references: [id])
+  sector   Sector   @relation(fields: [sectorId], references: [id])
+  manager  User?    @relation(fields: [managerId], references: [id])
+  floors   Floor[]
+  analytics MallAnalytics[]
+
+  @@map("malls")
+}
+
+model Floor {
+  id           String   @id @default(cuid())
+  mallId       String   @map("mall_id")
+  floorNumber  Int      @map("floor_number")
+  name         String
+  svgFileUrl   String?  @map("svg_file_url")
+  svgVersion   Int      @default(1) @map("svg_version")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  mall   Mall   @relation(fields: [mallId], references: [id], onDelete: Cascade)
+  spaces Space[]
+
+  @@unique([mallId, floorNumber])
+  @@map("floors")
+}
+
+// Space Management
+model Space {
+  id                String           @id @default(cuid())
+  floorId           String           @map("floor_id")
+  svgElementId      String           @map("svg_element_id")
+  name              String
+  type              SpaceType
+  sizeSqft          Float            @map("size_sqft")
+  priceMonthly      Float            @map("price_monthly")
+  availabilityStatus SpaceStatus     @default(AVAILABLE) @map("availability_status")
+  description       String?
+  frontage          String?
+  adjacentBrands    String[]         @map("adjacent_brands")
+  contactDetails    Json?            @map("contact_details") // { phone, email, contactPerson }
+  isActive          Boolean          @default(true) @map("is_active")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  floor           Floor              @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  amenities       SpaceAmenity[]
+  images          SpaceImage[]
+  recentViews     RecentView[]
+  interestedSpaces InterestedSpace[]
+  inquiries       SpaceInquiry[]
+  availabilityLogs SpaceAvailabilityLog[]
+  interestNotifications SpaceInterestNotification[]
+
+  @@map("spaces")
+}
+
+model SpaceAmenity {
+  id        String      @id @default(cuid())
+  spaceId   String      @map("space_id")
+  type      AmenityType
+  value     String
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@map("space_amenities")
+}
+
+model SpaceImage {
+  id        String  @id @default(cuid())
+  spaceId   String  @map("space_id")
+  imageUrl  String  @map("image_url")
+  isPrimary Boolean @default(false) @map("is_primary")
+  orderIndex Int    @default(0) @map("order_index")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@map("space_images")
+}
+
+// User Interactions
+model RecentView {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  spaceId      String   @map("space_id")
+  viewDuration Int      @default(0) @map("view_duration") // in seconds
+  viewedAt     DateTime @default(now()) @map("viewed_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, spaceId])
+  @@map("recent_views")
+}
+
+model InterestedSpace {
+  id            String        @id @default(cuid())
+  userId        String        @map("user_id")
+  spaceId       String        @map("space_id")
+  interestLevel InterestLevel @default(MEDIUM) @map("interest_level")
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, spaceId])
+  @@map("interested_spaces")
+}
+
+model SpaceInquiry {
+  id                String        @id @default(cuid())
+  userId            String        @map("user_id")
+  spaceId           String        @map("space_id")
+  message           String
+  contactPreference String        @map("contact_preference")
+  status            InquiryStatus @default(PENDING)
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@map("space_inquiries")
+}
+
+// Mall Management
+model MallManager {
+  id               String   @id @default(cuid())
+  userId           String   @unique @map("user_id")
+  assignedMalls    String[] @map("assigned_malls") // Array of mall IDs
+  permissions      Json?    // Manager permissions JSON
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("mall_managers")
+}
+
+// Analytics and Notifications
+model MallAnalytics {
+  id              String   @id @default(cuid())
+  mallId          String   @map("mall_id")
+  totalViews      Int      @default(0) @map("total_views")
+  totalInquiries  Int      @default(0) @map("total_inquiries")
+  conversionRate  Float    @default(0) @map("conversion_rate")
+  date            DateTime @default(now())
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  mall Mall @relation(fields: [mallId], references: [id], onDelete: Cascade)
+
+  @@map("mall_analytics")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?            // Additional notification data
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// User Activity Tracking
+model UserActivity {
+  id          String         @id @default(cuid())
+  userId      String         @map("user_id")
+  activityType ActivityType
+  description String
+  metadata    Json?          // Additional activity data
+  ipAddress   String?        @map("ip_address")
+  userAgent   String?        @map("user_agent")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_activities")
+}
+
+// Space Interest Notifications
+model SpaceInterestNotification {
+  id              String   @id @default(cuid())
+  spaceId         String   @map("space_id")
+  interestedUserId String  @map("interested_user_id")
+  mallManagerId   String?  @map("mall_manager_id")
+  isRead          Boolean  @default(false) @map("is_read")
+  notificationSent Boolean @default(false) @map("notification_sent")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  space           Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  interestedUser  User   @relation("InterestedUserNotifications", fields: [interestedUserId], references: [id], onDelete: Cascade)
+  mallManager     User?  @relation("MallManagerNotifications", fields: [mallManagerId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, interestedUserId])
+  @@map("space_interest_notifications")
+}
+
+model SpaceAvailabilityLog {
+  id          String       @id @default(cuid())
+  spaceId     String       @map("space_id")
+  oldStatus   SpaceStatus  @map("old_status")
+  newStatus   SpaceStatus  @map("new_status")
+  changedBy   String       @map("changed_by")
+  changedAt   DateTime     @default(now()) @map("changed_at")
+
+  // Relations
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@map("space_availability_logs")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  MALL_MANAGER
+  CUSTOMER
+}
+
+enum SpaceStatus {
+  PREMIUM
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  RESERVED
+}
+
+enum SpaceType {
+  RETAIL
+  FOOD_COURT
+  OFFICE
+  ENTERTAINMENT
+  SERVICES
+  PARKING
+  OTHER
+}
+
+enum AmenityType {
+  PARKING
+  SECURITY
+  ELEVATOR
+  ESCALATOR
+  WASHROOM
+  FOOD_COURT
+  ATM
+  WIFI
+  POWER_BACKUP
+  FIRE_SAFETY
+  ACCESSIBILITY
+  OTHER
+}
+
+enum InterestLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum InquiryStatus {
+  PENDING
+  CONTACTED
+  INTERESTED
+  NOT_INTERESTED
+  CLOSED
+}
+
+enum NotificationType {
+  SPACE_AVAILABLE
+  SPACE_UPDATED
+  INQUIRY_RESPONSE
+  SYSTEM_UPDATE
+  PROMOTION
+  SPACE_INTEREST
+  USER_ACTIVITY
+  ACCOUNT_CREATED
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+}
+
+enum ActivityType {
+  SIGNUP
+  LOGIN
+  LOGOUT
+  PROFILE_UPDATE
+  PASSWORD_CHANGE
+  SPACE_VIEW
+  SPACE_INTEREST
+  SPACE_INQUIRY
+  PREFERENCE_UPDATE
+  ACCOUNT_DEACTIVATED
+  ACCOUNT_ACTIVATED
+}

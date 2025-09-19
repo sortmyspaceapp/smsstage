@@ -1,0 +1,148 @@
+# ========================================
+# SERVER-ONLY DEPLOYMENT .gitignore
+# ========================================
+# This configuration is for AWS deployment
+# Excludes all Flutter files and keeps only server components
+
+# ========================================
+# EXCLUDE ALL FLUTTER FILES
+# ========================================
+# Flutter app source code
+lib/
+test/
+test_driver/
+assets/
+android/
+ios/
+linux/
+macos/
+web/
+windows/
+
+# Flutter build artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+analysis_options.yaml
+pubspec.yaml
+pubspec.lock
+.metadata
+
+# Flutter platform-specific files
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# Flutter app icon and splash
+**/ios/Runner/Assets.xcassets/AppIcon.appiconset/
+**/ios/Runner/LaunchScreen.storyboard
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Android Flutter artifacts
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ========================================
+# ENVIRONMENT & SECURITY FILES
+# ========================================
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+
+# SSL certificates
+ssl/
+*.pem
+*.key
+*.crt
+
+# ========================================
+# BACKEND SPECIFIC
+# ========================================
+backend/logs/
+backend/uploads/
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/prisma/migrations/
+
+# ========================================
+# ADMIN DASHBOARD SPECIFIC
+# ========================================
+admin-dashboard/node_modules/
+admin-dashboard/build/
+admin-dashboard/.env
+
+# ========================================
+# DOCKER & DEPLOYMENT
+# ========================================
+docker-compose.override.yml
+.dockerignore
+
+# ========================================
+# LOGS & TEMPORARY FILES
+# ========================================
+logs/
+*.log
+backups/
+*.tar.gz
+*.tmp
+*.temp
+
+# ========================================
+# IDE & OS FILES
+# ========================================
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+Thumbs.db
+
+# ========================================
+# DOCUMENTATION
+# ========================================
+# Exclude documentation files
+*.md
+
+# ========================================
+# MISC
+# ========================================
+*.class
+*.pyc
+*.swp
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Symbolication related
+app.*.symbols
+app.*.map.json
+
+# Coverage
+coverage/
+
+# Test upload files
+test-upload.*
+screenshot/

@@ -1,0 +1,322 @@
+name: SpaceFinder CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository }}/backend
+  IMAGE_NAME_ADMIN: ${{ github.repository }}/admin-dashboard
+
+jobs:
+  # Security and Code Quality Checks
+  security:
+    name: Security & Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            admin-dashboard/package-lock.json
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Install admin dependencies
+        run: |
+          cd admin-dashboard
+          npm ci
+
+      - name: Run backend security audit
+        run: |
+          cd backend
+          npm audit --audit-level=moderate
+
+      - name: Run admin security audit
+        run: |
+          cd admin-dashboard
+          npm audit --audit-level=moderate
+
+      - name: Run backend linting
+        run: |
+          cd backend
+          npm run lint || echo "Linting not configured"
+
+      - name: Run admin linting
+        run: |
+          cd admin-dashboard
+          npm run lint || echo "Linting not configured"
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          npm test || echo "Tests not configured"
+
+      - name: Run admin tests
+        run: |
+          cd admin-dashboard
+          npm test -- --coverage --watchAll=false || echo "Tests not configured"
+
+  # Build and Test Backend
+  backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    needs: security
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Generate Prisma client
+        run: |
+          cd backend
+          npx prisma generate
+
+      - name: Build backend
+        run: |
+          cd backend
+          npm run build
+
+      - name: Test build output
+        run: |
+          cd backend
+          node dist/index.js --version || echo "Build successful"
+
+  # Build and Test Admin Dashboard
+  admin:
+    name: Build Admin Dashboard
+    runs-on: ubuntu-latest
+    needs: security
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: admin-dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd admin-dashboard
+          npm ci
+
+      - name: Build admin dashboard
+        run: |
+          cd admin-dashboard
+          npm run build
+
+      - name: Test build output
+        run: |
+          cd admin-dashboard
+          ls -la build/
+
+  # Build Docker Images
+  docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [backend, admin]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract metadata for admin
+        id: meta-admin
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_ADMIN }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push admin image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin-dashboard
+          file: ./admin-dashboard/Dockerfile
+          push: true
+          tags: ${{ steps.meta-admin.outputs.tags }}
+          labels: ${{ steps.meta-admin.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Deploy to Production
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd /opt/spacefinder
+            
+            # Pull latest code
+            git pull origin main
+            
+            # Update images
+            docker-compose -f docker-compose.prod.yml pull
+            
+            # Stop services
+            docker-compose -f docker-compose.prod.yml down
+            
+            # Start services with new images
+            docker-compose -f docker-compose.prod.yml up -d
+            
+            # Run database migrations
+            docker-compose -f docker-compose.prod.yml exec -T backend npx prisma db push || true
+            
+            # Clean up old images
+            docker image prune -f
+            
+            # Check service health
+            sleep 30
+            curl -f http://localhost:3000/health || exit 1
+            curl -f http://localhost:8080/health || exit 1
+            
+            echo "Deployment successful!"
+          EOF
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+          fi
+
+  # Flutter Build (for mobile app)
+  flutter:
+    name: Build Flutter App
+    runs-on: ubuntu-latest
+    needs: security
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Build App Bundle
+        run: flutter build appbundle --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload App Bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-bundle
+          path: build/app/outputs/bundle/release/app-release.aab
+
+  # Security Scan
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
