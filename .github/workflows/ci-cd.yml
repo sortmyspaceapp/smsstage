@@ -226,8 +226,21 @@ jobs:
             # Update system packages
             sudo dnf update -y
             
-            # Install required packages
-            sudo dnf install -y git curl wget
+            # Install required packages (handle curl conflict)
+            sudo dnf install -y git wget || true
+            sudo dnf install -y curl --allowerasing || sudo dnf install -y curl-minimal || true
+            
+            # Verify packages are installed
+            echo "Verifying installed packages..."
+            which git || echo "Git not found, trying alternative installation..."
+            which curl || echo "Curl not found, using wget instead..."
+            which wget || echo "Wget not found!"
+            
+            # Alternative git installation if needed
+            if ! command -v git &> /dev/null; then
+              echo "Installing git from alternative source..."
+              sudo dnf install -y git-core || sudo yum install -y git || true
+            fi
             
             # Install Docker
             if ! command -v docker &> /dev/null; then
@@ -282,8 +295,15 @@ jobs:
             
             # Check service health
             sleep 30
-            curl -f http://localhost:3000/health || exit 1
-            curl -f http://localhost:8080/health || exit 1
+            echo "Checking service health..."
+            if command -v curl &> /dev/null; then
+              curl -f http://localhost:3000/health || exit 1
+              curl -f http://localhost:8080/health || exit 1
+            else
+              echo "Using wget for health checks..."
+              wget -q --spider http://localhost:3000/health || exit 1
+              wget -q --spider http://localhost:8080/health || exit 1
+            fi
             
             echo "Deployment successful!"
           EOF
