@@ -66,7 +66,7 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
       process.env.FRONTEND_URL,
       process.env.ADMIN_URL,
       process.env.MOBILE_APP_URL
-    ].filter(Boolean)
+    ].filter((url): url is string => Boolean(url))
   : true; // Allow all origins in development
 
 app.use(cors({
