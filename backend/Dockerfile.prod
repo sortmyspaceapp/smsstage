@@ -24,7 +24,7 @@ RUN npm run build
 FROM node:18-alpine AS production
 
 # Install required libraries for Prisma
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl libc6-compat
 
 # Create app user for security
 RUN addgroup -g 1001 -S nodejs && \
