@@ -332,6 +332,17 @@ jobs:
             
             # Check service health
             sleep 30
+            
+            echo "🔍 Checking service status..."
+            # Check service status and logs
+            sudo -E docker-compose -f docker-compose.prod.yml ps
+            
+            echo "📋 PostgreSQL logs:"
+            sudo -E docker-compose -f docker-compose.prod.yml logs postgres || true
+            
+            echo "📋 Backend logs:"
+            sudo -E docker-compose -f docker-compose.prod.yml logs backend || true
+            
             echo "Checking service health..."
             if command -v curl &> /dev/null; then
               curl -f http://localhost:3000/health || exit 1
