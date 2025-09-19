@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import SvgEditor from './components/SvgEditor';
 import SvgUpload from './components/SvgUpload';
@@ -255,17 +255,19 @@ const App: React.FC = () => {
   (window as any).forceRefreshNotifications = forceRefreshNotifications;
 
   // SVG operations
-  const handleSvgUpload = (mallId: string, floorId: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleSvgUpload = useCallback((mallId: string, floorId: string) => {
     setSelectedMallId(mallId);
     setSelectedFloorId(floorId);
     setShowSvgUpload(true);
-  };
+  }, []);
 
-  const handleSvgEdit = (mallId: string, floorId: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleSvgEdit = useCallback((mallId: string, floorId: string) => {
     setSelectedMallId(mallId);
     setSelectedFloorId(floorId);
     setShowSvgEditor(true);
-  };
+  }, []);
 
   // Floor selection for SVG operations
   const handleFloorSelection = (mall: Mall, action: 'upload' | 'edit') => {

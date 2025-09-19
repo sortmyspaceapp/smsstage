@@ -47,65 +47,23 @@ const Leads: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isPolling, setIsPolling] = useState(false);
 
-  useEffect(() => {
-    fetchLeads();
-    fetchNotifications();
-    fetchNotificationCount();
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const response = await api.get('/notifications?type=SPACE_INTEREST');
+      setNotifications(response.data.data.notifications);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    }
   }, []);
 
-  // Set up polling for new notifications
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchNotificationCount();
-      // Only fetch notifications if the popup is open to reduce unnecessary API calls
-      if (showNotifications) {
-        fetchNotifications();
-      }
-    }, 5000); // Check every 5 seconds for updates
-
-    return () => clearInterval(interval);
-  }, [showNotifications]);
-
-  useEffect(() => {
-    fetchLeads();
-  }, [filter, sortBy]);
-
-  // Poll for new leads every 5 seconds for real-time detection (reduced frequency)
-  useEffect(() => {
-    const leadsInterval = setInterval(() => {
-      setIsPolling(true);
-      fetchLeads(false); // Don't show loading on polling
-      setTimeout(() => setIsPolling(false), 1000); // Reset polling state after 1 second
-    }, 5000); // Check every 5 seconds for new leads
-
-    return () => clearInterval(leadsInterval);
-  }, [filter, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Add escape key and click outside to close notifications
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showNotifications) {
-        setShowNotifications(false);
-      }
-    };
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (showNotifications && !target.closest('.notifications-popup') && !target.closest('.notification-bell')) {
-        setShowNotifications(false);
-      }
-    };
-
-    if (showNotifications) {
-      document.addEventListener('keydown', handleEscape);
-      document.addEventListener('mousedown', handleClickOutside);
+  const fetchNotificationCount = useCallback(async () => {
+    try {
+      const response = await api.get('/notifications/count?unreadOnly=true&type=SPACE_INTEREST');
+      setUnreadCount(response.data.data.count);
+    } catch (error) {
+      console.error('Failed to fetch notification count:', error);
     }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showNotifications]);
+  }, []);
 
   const fetchLeads = useCallback(async (showLoading = true) => {
     try {
@@ -159,25 +117,68 @@ const Leads: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         setLoading(false);
       }
     }
-  }, [filter, sortBy, previousLeadCount, isInitialLoad]);
+  }, [filter, sortBy, previousLeadCount, isInitialLoad, fetchNotificationCount, fetchNotifications]);
 
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const response = await api.get('/notifications?type=SPACE_INTEREST');
-      setNotifications(response.data.data.notifications);
-    } catch (error) {
-      console.error('Failed to fetch notifications:', error);
-    }
-  }, []);
+  useEffect(() => {
+    fetchLeads();
+    fetchNotifications();
+    fetchNotificationCount();
+  }, [fetchLeads, fetchNotifications, fetchNotificationCount]);
 
-  const fetchNotificationCount = useCallback(async () => {
-    try {
-      const response = await api.get('/notifications/count?unreadOnly=true&type=SPACE_INTEREST');
-      setUnreadCount(response.data.data.count);
-    } catch (error) {
-      console.error('Failed to fetch notification count:', error);
+  // Set up polling for new notifications
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchNotificationCount();
+      // Only fetch notifications if the popup is open to reduce unnecessary API calls
+      if (showNotifications) {
+        fetchNotifications();
+      }
+    }, 5000); // Check every 5 seconds for updates
+
+    return () => clearInterval(interval);
+  }, [showNotifications, fetchNotificationCount, fetchNotifications]);
+
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
+
+  // Poll for new leads every 5 seconds for real-time detection (reduced frequency)
+  useEffect(() => {
+    const leadsInterval = setInterval(() => {
+      setIsPolling(true);
+      fetchLeads(false); // Don't show loading on polling
+      setTimeout(() => setIsPolling(false), 1000); // Reset polling state after 1 second
+    }, 5000); // Check every 5 seconds for new leads
+
+    return () => clearInterval(leadsInterval);
+  }, [filter, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Add escape key and click outside to close notifications
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showNotifications) {
+        setShowNotifications(false);
+      }
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (showNotifications && !target.closest('.notifications-popup') && !target.closest('.notification-bell')) {
+        setShowNotifications(false);
+      }
+    };
+
+    if (showNotifications) {
+      document.addEventListener('keydown', handleEscape);
+      document.addEventListener('mousedown', handleClickOutside);
     }
-  }, []);
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotifications]);
+
 
   const markAsRead = async (leadId: string) => {
     try {

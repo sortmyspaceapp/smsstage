@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 interface DailyStat {
@@ -61,22 +61,22 @@ const Analytics: React.FC<AnalyticsProps> = ({ onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [selectedDays, setSelectedDays] = useState(30);
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, [selectedDays]);
-
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get(`/api/activity/analytics?days=${selectedDays}`);
       setAnalytics(response.data.data);
     } catch (error) {
       setError('Failed to fetch analytics');
-      console.error('Error fetching analytics:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedDays]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
+
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
