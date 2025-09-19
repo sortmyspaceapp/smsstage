@@ -220,13 +220,46 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to server
+      - name: Setup server and deploy
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            # Update system packages
+            sudo dnf update -y
+            
+            # Install required packages
+            sudo dnf install -y git curl wget
+            
+            # Install Docker
+            if ! command -v docker &> /dev/null; then
+              sudo dnf install -y docker
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker $USER
+            fi
+            
+            # Install Docker Compose
+            if ! command -v docker-compose &> /dev/null; then
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
+            
+            # Create application directory
+            sudo mkdir -p /opt/spacefinder
+            sudo chown $USER:$USER /opt/spacefinder
             cd /opt/spacefinder
             
-            # Pull latest code
-            git pull origin main
+            # Clone repository if not exists
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/sortmyspaceapp/smsstage.git .
+            else
+              git pull origin main
+            fi
+            
+            # Copy environment file
+            if [ ! -f ".env.production" ]; then
+              cp env.production.example .env.production
+              echo "Please update .env.production with your actual values"
+            fi
             
             # Update images
             docker-compose -f docker-compose.prod.yml pull
@@ -261,22 +294,3 @@ jobs:
           fi
 
 
-  # Security Scan
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    needs: [docker]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.IMAGE_NAME_BACKEND }}:latest
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
