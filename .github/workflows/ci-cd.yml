@@ -220,7 +220,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Setup server and deploy
+      - name: Setup server
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             # Update system packages
@@ -234,7 +234,6 @@ jobs:
               sudo dnf install -y docker
               sudo systemctl start docker
               sudo systemctl enable docker
-              sudo usermod -aG docker $USER
             fi
             
             # Install Docker Compose
@@ -243,9 +242,17 @@ jobs:
               sudo chmod +x /usr/local/bin/docker-compose
             fi
             
+            # Add user to docker group
+            sudo usermod -aG docker $USER
+            
             # Create application directory
             sudo mkdir -p /opt/spacefinder
             sudo chown $USER:$USER /opt/spacefinder
+          EOF
+
+      - name: Deploy application
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             cd /opt/spacefinder
             
             # Clone repository if not exists
@@ -261,20 +268,20 @@ jobs:
               echo "Please update .env.production with your actual values"
             fi
             
-            # Update images
-            docker-compose -f docker-compose.prod.yml pull
+            # Use sudo for docker commands to avoid permission issues
+            sudo docker-compose -f docker-compose.prod.yml pull
             
             # Stop services
-            docker-compose -f docker-compose.prod.yml down
+            sudo docker-compose -f docker-compose.prod.yml down
             
             # Start services with new images
-            docker-compose -f docker-compose.prod.yml up -d
+            sudo docker-compose -f docker-compose.prod.yml up -d
             
             # Run database migrations
-            docker-compose -f docker-compose.prod.yml exec -T backend npx prisma db push || true
+            sudo docker-compose -f docker-compose.prod.yml exec -T backend npx prisma db push || true
             
             # Clean up old images
-            docker image prune -f
+            sudo docker image prune -f
             
             # Check service health
             sleep 30
