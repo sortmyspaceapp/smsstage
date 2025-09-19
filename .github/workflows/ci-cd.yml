@@ -218,11 +218,38 @@ jobs:
       - name: Add server to known hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+          echo "Attempting to connect to server: ${{ secrets.SERVER_HOST }}"
+          
+          # Test basic connectivity first
+          ping -c 3 ${{ secrets.SERVER_HOST }} || echo "Ping failed, but continuing..."
+          
+          # Try to scan SSH keys with timeout and error handling
+          ssh-keyscan -H -T 10 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts || {
+            echo "SSH keyscan failed - server may not be accessible yet"
+            echo "This is expected if the server doesn't exist yet"
+            echo "Continuing with deployment attempt..."
+          }
+          
+          echo "Known hosts file content:"
+          cat ~/.ssh/known_hosts 2>/dev/null || echo "No known hosts file found"
 
       - name: Setup server and deploy
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          echo "Attempting to connect to server: ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          
+          # Test SSH connection first
+          ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo 'SSH connection successful'" || {
+            echo "SSH connection failed!"
+            echo "Please ensure:"
+            echo "1. The server is running and accessible"
+            echo "2. SSH port 22 is open in security groups"
+            echo "3. The SSH_PRIVATE_KEY secret is correct"
+            echo "4. The SERVER_HOST and SERVER_USER secrets are correct"
+            exit 1
+          }
+          
+          # If SSH test passes, proceed with deployment
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             # Update system packages
             sudo dnf update -y
             
