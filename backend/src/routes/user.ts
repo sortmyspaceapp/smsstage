@@ -12,7 +12,9 @@ import {
   getAllUsers,
   createUser,
   updateUser,
-  deleteUser
+  deleteUser,
+  resetUserPassword,
+  changePassword
 } from '../controllers/userController';
 
 const router = express.Router();
@@ -24,6 +26,7 @@ router.use(authenticate);
 router.get('/profile', getProfile);
 router.put('/profile', updateProfile);
 router.put('/preferences', updatePreferences);
+router.put('/change-password', changePassword);
 
 // Recent views
 router.get('/recent-views', getRecentViews);
@@ -38,6 +41,7 @@ router.put('/interested/:spaceId', updateInterestLevel);
 router.get('/all', authorize('ADMIN'), getAllUsers);
 router.post('/', authorize('ADMIN'), createUser);
 router.put('/:id', authorize('ADMIN'), updateUser);
+router.put('/:id/reset-password', authorize('ADMIN'), resetUserPassword);
 router.delete('/:id', authorize('ADMIN'), deleteUser);
 
 export default router;

@@ -79,6 +79,20 @@ export class ActivityService {
   }
 
   /**
+   * Log password change activity
+   */
+  static async logPasswordChange(userId: string, ipAddress?: string, userAgent?: string): Promise<void> {
+    await this.logActivity({
+      userId,
+      activityType: 'PROFILE_UPDATE',
+      description: 'User changed their password',
+      metadata: { field: 'password' },
+      ipAddress,
+      userAgent,
+    });
+  }
+
+  /**
    * Log space interest activity
    */
   static async logSpaceInterest(userId: string, spaceId: string, interestLevel: string, ipAddress?: string, userAgent?: string): Promise<void> {
@@ -131,7 +145,7 @@ export class ActivityService {
   ) {
     const skip = (page - 1) * limit;
     const where: any = { userId };
-    
+
     if (activityType) {
       where.activityType = activityType;
     }

@@ -63,9 +63,15 @@ export const uploadSvg = async (req: Request, res: Response): Promise<void> => {
 
     // Read the uploaded SVG file
     const svgPath = req.file.path;
-    const svgContent = await readFile(svgPath, 'utf8');
+    let svgContent = await readFile(svgPath, 'utf8');
 
-    // Extract path IDs from SVG
+    // Normalize SVG structure (remove classes, flatten <g> elements, etc.)
+    svgContent = normalizeSvg(svgContent);
+
+    // Write the normalized SVG back to file
+    await writeFile(svgPath, svgContent, 'utf8');
+
+    // Extract path IDs from normalized SVG
     const pathIds = extractPathIds(svgContent);
 
     // Get current floor to check svgVersion
@@ -141,7 +147,100 @@ export const uploadSvg = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// Extract path IDs from SVG content
+/**
+ * Normalize SVG structure:
+ * 1. Remove CSS classes from clickable elements
+ * 2. Flatten <g> elements - move ID from <g> to first child <path>
+ * 3. Clean up style attributes that might interfere
+ */
+function normalizeSvg(svgContent: string): string {
+  try {
+    let normalized = svgContent;
+
+    // List of IDs to exclude (non-clickable elements)
+    const excludedIds = ['outline', 'background_fill', 'image', 'staircase', 'staircase_2', 
+                         'circular_staircase_1', 'circular_staircase_2', 'circular_staircase_3', 
+                         'circular_staircase_4', 'lines_corridar', 'corridor', 'Open_Patio', 
+                         'entrance_door-2'];
+
+    // Step 1: Flatten <g> elements with shop_ or map_ IDs
+    // Match <g id="shop_X" or <g id="map_X" and capture the group content
+    const groupRegex = /<g\s+([^>]*id\s*=\s*["'](shop_\d+|map_[^"']+)["'][^>]*)>([\s\S]*?)<\/g>/gi;
+    
+    normalized = normalized.replace(groupRegex, (match, attributes, id, content) => {
+      // Skip excluded IDs
+      if (excludedIds.includes(id)) {
+        return match; // Keep original group
+      }
+
+      // Find the first <path> element in the group content
+      const pathMatch = content.match(/<path\s+([^>]*)>/i);
+      
+      if (pathMatch) {
+        // Extract existing path attributes
+        let pathAttrs = pathMatch[1];
+        
+        // Remove existing id and class from path if present
+        pathAttrs = pathAttrs.replace(/\s+id\s*=\s*["'][^"']*["']/gi, '');
+        pathAttrs = pathAttrs.replace(/\s+class\s*=\s*["'][^"']*["']/gi, '');
+        pathAttrs = pathAttrs.replace(/\s+style\s*=\s*["'][^"']*["']/gi, '');
+        
+        // Add the ID from the group to the first path
+        const newPath = `<path id="${id}"${pathAttrs ? ' ' + pathAttrs.trim() : ''}>`;
+        
+        // Replace the first path in content with the new one
+        const updatedContent = content.replace(/<path\s+[^>]*>/i, newPath);
+        
+        // Remove class attributes from all paths in the content
+        const cleanedContent = updatedContent.replace(/<path([^>]*)\s+class\s*=\s*["'][^"']*["']([^>]*)>/gi, '<path$1$2>');
+        const finalContent = cleanedContent.replace(/<path([^>]*)\s+style\s*=\s*["'][^"']*["']([^>]*)>/gi, '<path$1$2>');
+        
+        // Return the unwrapped content (remove the <g> wrapper)
+        return finalContent;
+      }
+      
+      // If no path found, return original
+      return match;
+    });
+
+    // Step 2: Remove class attributes from clickable elements (map_ and shop_)
+    // Match elements with map_ or shop_ IDs and remove class attribute
+    normalized = normalized.replace(
+      /<(path|rect|circle|ellipse|polygon|polyline)([^>]*id\s*=\s*["'](shop_\d+|map_[^"']+)["'][^>]*)>/gi,
+      (match, tag, attrs) => {
+        // Remove class attribute
+        attrs = attrs.replace(/\s+class\s*=\s*["'][^"']*["']/gi, '');
+        // Remove style attribute (we'll set it dynamically)
+        attrs = attrs.replace(/\s+style\s*=\s*["'][^"']*["']/gi, '');
+        return `<${tag}${attrs}>`;
+      }
+    );
+
+    // Step 3: Clean up CSS in <style> tags - remove fill and stroke rules
+    normalized = normalized.replace(
+      /<style[^>]*>([\s\S]*?)<\/style>/gi,
+      (match, cssContent) => {
+        // Remove CSS rules that set fill or stroke
+        let cleaned = cssContent
+          .replace(/\.cls-\d+\s*\{[^}]*fill[^}]*\}/g, '')
+          .replace(/\.cls-\d+\s*\{[^}]*stroke[^}]*\}/g, '')
+          .replace(/fill\s*:[^;]+;?/gi, '')
+          .replace(/stroke\s*:[^;]+;?/gi, '');
+        
+        return `<style>${cleaned}</style>`;
+      }
+    );
+
+    logger.info('SVG normalized successfully');
+    return normalized;
+  } catch (error) {
+    logger.error('Error normalizing SVG:', error);
+    // Return original content if normalization fails
+    return svgContent;
+  }
+}
+
+// Extract path IDs from SVG content (after normalization, all IDs should be on paths)
 function extractPathIds(svgContent: string): string[] {
   const pathIds: string[] = [];
   
@@ -160,7 +259,13 @@ function extractPathIds(svgContent: string): string[] {
     pathIds.push(match[2]);
   }
 
-  return [...new Set(pathIds)]; // Remove duplicates
+  // Exclude non-clickable elements
+  const excludedIds = ['outline', 'background_fill', 'image', 'staircase', 'staircase_2', 
+                       'circular_staircase_1', 'circular_staircase_2', 'circular_staircase_3', 
+                       'circular_staircase_4', 'lines_corridar', 'corridor', 'Open_Patio', 
+                       'entrance_door-2'];
+
+  return [...new Set(pathIds.filter(id => !excludedIds.includes(id)))]; // Remove duplicates and excluded IDs
 }
 
 // Get SVG content for a floor

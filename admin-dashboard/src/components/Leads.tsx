@@ -49,7 +49,7 @@ const Leads: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const response = await api.get('/notifications?type=SPACE_INTEREST');
+      const response = await api.get('/api/notifications?type=SPACE_INTEREST');
       setNotifications(response.data.data.notifications);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
@@ -58,7 +58,7 @@ const Leads: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const fetchNotificationCount = useCallback(async () => {
     try {
-      const response = await api.get('/notifications/count?unreadOnly=true&type=SPACE_INTEREST');
+      const response = await api.get('/api/notifications/count?unreadOnly=true&type=SPACE_INTEREST');
       setUnreadCount(response.data.data.count);
     } catch (error) {
       console.error('Failed to fetch notification count:', error);
@@ -70,41 +70,41 @@ const Leads: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       if (showLoading) {
         setLoading(true);
       }
-      const response = await api.get(`/leads?page=1&limit=100&filter=${filter}&sortBy=${sortBy}`);
+      const response = await api.get(`/api/leads?page=1&limit=100&filter=${filter}&sortBy=${sortBy}`);
       const newLeads = response.data.data.leads;
-      
+
       // Check for new leads
       if (previousLeadCount > 0 && newLeads.length > previousLeadCount) {
         const newLead = newLeads[0]; // Most recent lead
         setNewLeadData(newLead);
         setShowNewLeadAlert(true);
-        
+
         // Play notification sound
         try {
           const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU5k9n1unEiBS13yO/eizEIHWq+8+OWT');
-          audio.play().catch(() => {}); // Ignore errors if audio fails
+          audio.play().catch(() => { }); // Ignore errors if audio fails
         } catch (e) {
           // Ignore audio errors
         }
-        
+
         // Immediately refresh notification count when new lead is detected
         fetchNotificationCount();
         fetchNotifications();
-        
+
         // Also trigger global notification refresh
         if ((window as any).forceRefreshNotifications) {
           (window as any).forceRefreshNotifications();
         }
-        
+
         // Auto-hide alert after 5 seconds
         setTimeout(() => {
           setShowNewLeadAlert(false);
         }, 5000);
       }
-      
+
       setPreviousLeadCount(newLeads.length);
       setLeads(newLeads);
-      
+
       // Mark initial load as complete
       if (isInitialLoad) {
         setIsInitialLoad(false);
@@ -182,8 +182,8 @@ const Leads: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const markAsRead = async (leadId: string) => {
     try {
-      await api.patch(`/leads/${leadId}/read`);
-      setLeads(prev => prev.map(lead => 
+      await api.patch(`/api/leads/${leadId}/read`);
+      setLeads(prev => prev.map(lead =>
         lead.id === leadId ? { ...lead, isRead: true } : lead
       ));
       fetchNotificationCount();
@@ -194,7 +194,7 @@ const Leads: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const markAllAsRead = async () => {
     try {
-      await api.patch('/leads/read-all');
+      await api.patch('/api/leads/read-all');
       setLeads(prev => prev.map(lead => ({ ...lead, isRead: true })));
       setNotifications(prev => prev.map(notification => ({ ...notification, isRead: true })));
       setUnreadCount(0);
@@ -218,8 +218,8 @@ const Leads: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     switch (sortBy) {
       case 'interest':
         const interestOrder = { 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
-        return (interestOrder[b.interestLevel as keyof typeof interestOrder] || 0) - 
-               (interestOrder[a.interestLevel as keyof typeof interestOrder] || 0);
+        return (interestOrder[b.interestLevel as keyof typeof interestOrder] || 0) -
+          (interestOrder[a.interestLevel as keyof typeof interestOrder] || 0);
       case 'space':
         return a.spaceName.localeCompare(b.spaceName);
       default:
@@ -250,239 +250,234 @@ const Leads: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   if (loading) {
     return (
-      <div className="leads-modal">
-        <div className="leads-content">
-          <div className="loading">Loading leads...</div>
-        </div>
+      <div className="leads-content" style={{ padding: '2rem', background: 'white', borderRadius: '8px' }}>
+        <div className="loading">Loading leads...</div>
       </div>
     );
   }
 
   return (
-    <div className="leads-modal">
-      <div className="leads-content">
-        <div className="leads-header">
-          <h2>Leads Management {isPolling && <span className="polling-indicator">⟳</span>}</h2>
-          <div className="header-actions">
-            <button 
-              className="notification-btn"
-              onClick={() => setShowNotifications(!showNotifications)}
-            >
-              🔔 Notifications {unreadCount > 0 && `(${unreadCount})`}
-            </button>
-            <button onClick={onClose} className="close-btn">×</button>
-          </div>
-        </div>
-
-        {/* Notifications Popup */}
-        {showNotifications && (
-          <div className="notifications-popup">
-            <div className="notifications-header">
-              <h3>Recent Notifications</h3>
-              <div className="notification-actions">
-                <button onClick={markAllAsRead} className="mark-all-read-btn">
-                  Mark All Read
-                </button>
-                <button 
-                  onClick={() => setShowNotifications(false)} 
-                  className="close-notifications-btn"
-                  title="Close notifications"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div className="notifications-list">
-              {notifications.slice(0, 10).map(notification => (
-                <div 
-                  key={notification.id} 
-                  className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
-                >
-                  <div className="notification-content">
-                    <h4>{notification.title}</h4>
-                    <p>{notification.message}</p>
-                    <span className="notification-time">
-                      {formatDate(notification.createdAt)}
-                    </span>
-                  </div>
-                  {!notification.isRead && (
-                    <button 
-                      onClick={() => markAsRead(notification.id)}
-                      className="mark-read-btn"
-                    >
-                      Mark Read
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* New Lead Alert Popup */}
-        {showNewLeadAlert && newLeadData && (
-          <div className="new-lead-alert">
-            <div className="alert-content">
-              <div className="alert-header">
-                <h3>🎉 New Lead Alert!</h3>
-                <button 
-                  onClick={() => setShowNewLeadAlert(false)} 
-                  className="close-alert-btn"
-                >
-                  ×
-                </button>
-              </div>
-              <div className="alert-body">
-                <p><strong>{newLeadData.interestedUserName}</strong> is interested in:</p>
-                <p><strong>{newLeadData.spaceName}</strong> in {newLeadData.mallName}</p>
-                <p>Location: {newLeadData.city}, {newLeadData.sector}</p>
-                <p>Size: {newLeadData.spaceSize} sq ft | Price: ₹{newLeadData.spacePrice.toLocaleString()}</p>
-                <p>Contact: {newLeadData.interestedUserEmail}</p>
-              </div>
-              <div className="alert-actions">
-                <button 
-                  onClick={() => {
-                    setShowNewLeadAlert(false);
-                    setShowNotifications(true);
-                  }}
-                  className="view-notifications-btn"
-                >
-                  View All Notifications
-                </button>
-                <button 
-                  onClick={() => setShowNewLeadAlert(false)}
-                  className="dismiss-btn"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Filters and Controls */}
-        <div className="leads-controls">
-          <div className="filters">
-            <label>Filter:</label>
-            <select 
-              value={filter} 
-              onChange={(e) => setFilter(e.target.value as any)}
-            >
-              <option value="all">All Leads</option>
-              <option value="unread">Unread Only</option>
-              <option value="high_interest">High Interest</option>
-            </select>
-          </div>
-          
-          <div className="sort">
-            <label>Sort by:</label>
-            <select 
-              value={sortBy} 
-              onChange={(e) => setSortBy(e.target.value as any)}
-            >
-              <option value="date">Date</option>
-              <option value="interest">Interest Level</option>
-              <option value="space">Space Name</option>
-            </select>
-          </div>
-
-          <button onClick={() => fetchLeads(true)} className="refresh-btn">
-            Refresh
+    <div className="leads-content" style={{ padding: '2rem', background: 'white', borderRadius: '8px' }}>
+      <div className="leads-header" style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2>Leads Management {isPolling && <span className="polling-indicator">⟳</span>}</h2>
+        <div className="header-actions">
+          <button
+            className="notification-btn action-btn"
+            onClick={() => setShowNotifications(!showNotifications)}
+          >
+            🔔 Notifications {unreadCount > 0 && `(${unreadCount})`}
           </button>
         </div>
+      </div>
 
-        {/* Leads Table */}
-        <div className="leads-table-container">
-          {error && <div className="error-message">{error}</div>}
-          
-          {sortedLeads.length === 0 ? (
-            <div className="no-leads">No leads found</div>
-          ) : (
-            <table className="leads-table">
-              <thead>
-                <tr>
-                  <th>User Details</th>
-                  <th>Space Details</th>
-                  <th>Interest Level</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedLeads.map(lead => (
-                  <tr key={lead.id} className={!lead.isRead ? 'unread-lead' : ''}>
-                    <td className="user-details">
-                      <div className="user-info">
-                        <strong>{lead.interestedUserName || 'Unknown User'}</strong>
-                        <div className="user-email">{lead.interestedUserEmail}</div>
-                        <div className="user-id">ID: {lead.interestedUserId}</div>
-                      </div>
-                    </td>
-                    <td className="space-details">
-                      <div className="space-info">
-                        <strong>{lead.spaceName}</strong>
-                        <div className="space-location">
-                          {lead.mallName}, {lead.city}
-                        </div>
-                        <div className="space-specs">
-                          Floor {lead.spaceFloor} • {lead.spaceSize} sq ft • {formatPrice(lead.spacePrice)}/month
-                        </div>
-                        <div className="space-sector">{lead.sector}</div>
-                      </div>
-                    </td>
-                    <td className="interest-level">
-                      <span 
-                        className="interest-badge"
-                        style={{ backgroundColor: getInterestLevelColor(lead.interestLevel) }}
-                      >
-                        {lead.interestLevel}
-                      </span>
-                    </td>
-                    <td className="date">
-                      {formatDate(lead.createdAt)}
-                    </td>
-                    <td className="status">
-                      <span className={`status-badge ${lead.isRead ? 'read' : 'unread'}`}>
-                        {lead.isRead ? 'Read' : 'Unread'}
-                      </span>
-                    </td>
-                    <td className="actions">
-                      <button 
-                        onClick={() => markAsRead(lead.id)}
-                        className="action-btn mark-read"
-                        disabled={lead.isRead}
-                      >
-                        {lead.isRead ? 'Read' : 'Mark Read'}
-                      </button>
-                      <button 
-                        className="action-btn contact"
-                        onClick={() => window.open(`mailto:${lead.interestedUserEmail}`)}
-                      >
-                        Contact
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+      {/* Notifications Popup */}
+      {showNotifications && (
+        <div className="notifications-popup">
+          <div className="notifications-header">
+            <h3>Recent Notifications</h3>
+            <div className="notification-actions">
+              <button onClick={markAllAsRead} className="mark-all-read-btn">
+                Mark All Read
+              </button>
+              <button
+                onClick={() => setShowNotifications(false)}
+                className="close-notifications-btn"
+                title="Close notifications"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          <div className="notifications-list">
+            {notifications.slice(0, 10).map(notification => (
+              <div
+                key={notification.id}
+                className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
+              >
+                <div className="notification-content">
+                  <h4>{notification.title}</h4>
+                  <p>{notification.message}</p>
+                  <span className="notification-time">
+                    {formatDate(notification.createdAt)}
+                  </span>
+                </div>
+                {!notification.isRead && (
+                  <button
+                    onClick={() => markAsRead(notification.id)}
+                    className="mark-read-btn"
+                  >
+                    Mark Read
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* New Lead Alert Popup */}
+      {showNewLeadAlert && newLeadData && (
+        <div className="new-lead-alert">
+          <div className="alert-content">
+            <div className="alert-header">
+              <h3>🎉 New Lead Alert!</h3>
+              <button
+                onClick={() => setShowNewLeadAlert(false)}
+                className="close-alert-btn"
+              >
+                ×
+              </button>
+            </div>
+            <div className="alert-body">
+              <p><strong>{newLeadData.interestedUserName}</strong> is interested in:</p>
+              <p><strong>{newLeadData.spaceName}</strong> in {newLeadData.mallName}</p>
+              <p>Location: {newLeadData.city}, {newLeadData.sector}</p>
+              <p>Size: {newLeadData.spaceSize} sq ft | Price: ₹{newLeadData.spacePrice.toLocaleString()}</p>
+              <p>Contact: {newLeadData.interestedUserEmail}</p>
+            </div>
+            <div className="alert-actions">
+              <button
+                onClick={() => {
+                  setShowNewLeadAlert(false);
+                  setShowNotifications(true);
+                }}
+                className="view-notifications-btn"
+              >
+                View All Notifications
+              </button>
+              <button
+                onClick={() => setShowNewLeadAlert(false)}
+                className="dismiss-btn"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filters and Controls */}
+      <div className="leads-controls">
+        <div className="filters">
+          <label>Filter:</label>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as any)}
+          >
+            <option value="all">All Leads</option>
+            <option value="unread">Unread Only</option>
+            <option value="high_interest">High Interest</option>
+          </select>
         </div>
 
-        {/* Summary Stats */}
-        <div className="leads-summary">
-          <div className="summary-stat">
-            <span className="stat-label">Total Leads:</span>
-            <span className="stat-value">{leads.length}</span>
-          </div>
-          <div className="summary-stat">
-            <span className="stat-label">Unread:</span>
-            <span className="stat-value">{leads.filter(l => !l.isRead).length}</span>
-          </div>
-          <div className="summary-stat">
-            <span className="stat-label">High Interest:</span>
-            <span className="stat-value">{leads.filter(l => l.interestLevel === 'HIGH').length}</span>
-          </div>
+        <div className="sort">
+          <label>Sort by:</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+          >
+            <option value="date">Date</option>
+            <option value="interest">Interest Level</option>
+            <option value="space">Space Name</option>
+          </select>
+        </div>
+
+        <button onClick={() => fetchLeads(true)} className="refresh-btn">
+          Refresh
+        </button>
+      </div>
+
+      {/* Leads Table */}
+      <div className="leads-table-container">
+        {error && <div className="error-message">{error}</div>}
+
+        {sortedLeads.length === 0 ? (
+          <div className="no-leads">No leads found</div>
+        ) : (
+          <table className="leads-table">
+            <thead>
+              <tr>
+                <th>User Details</th>
+                <th>Space Details</th>
+                <th>Interest Level</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedLeads.map(lead => (
+                <tr key={lead.id} className={!lead.isRead ? 'unread-lead' : ''}>
+                  <td className="user-details">
+                    <div className="user-info">
+                      <strong>{lead.interestedUserName || 'Unknown User'}</strong>
+                      <div className="user-email">{lead.interestedUserEmail}</div>
+                      <div className="user-id">ID: {lead.interestedUserId}</div>
+                    </div>
+                  </td>
+                  <td className="space-details">
+                    <div className="space-info">
+                      <strong>{lead.spaceName}</strong>
+                      <div className="space-location">
+                        {lead.mallName}, {lead.city}
+                      </div>
+                      <div className="space-specs">
+                        Floor {lead.spaceFloor} • {lead.spaceSize} sq ft • {formatPrice(lead.spacePrice)}/month
+                      </div>
+                      <div className="space-sector">{lead.sector}</div>
+                    </div>
+                  </td>
+                  <td className="interest-level">
+                    <span
+                      className="interest-badge"
+                      style={{ backgroundColor: getInterestLevelColor(lead.interestLevel) }}
+                    >
+                      {lead.interestLevel}
+                    </span>
+                  </td>
+                  <td className="date">
+                    {formatDate(lead.createdAt)}
+                  </td>
+                  <td className="status">
+                    <span className={`status-badge ${lead.isRead ? 'read' : 'unread'}`}>
+                      {lead.isRead ? 'Read' : 'Unread'}
+                    </span>
+                  </td>
+                  <td className="actions">
+                    <button
+                      onClick={() => markAsRead(lead.id)}
+                      className="action-btn mark-read"
+                      disabled={lead.isRead}
+                    >
+                      {lead.isRead ? 'Read' : 'Mark Read'}
+                    </button>
+                    <button
+                      className="action-btn contact"
+                      onClick={() => window.open(`mailto:${lead.interestedUserEmail}`)}
+                    >
+                      Contact
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Summary Stats */}
+      <div className="leads-summary">
+        <div className="summary-stat">
+          <span className="stat-label">Total Leads:</span>
+          <span className="stat-value">{leads.length}</span>
+        </div>
+        <div className="summary-stat">
+          <span className="stat-label">Unread:</span>
+          <span className="stat-value">{leads.filter(l => !l.isRead).length}</span>
+        </div>
+        <div className="summary-stat">
+          <span className="stat-label">High Interest:</span>
+          <span className="stat-value">{leads.filter(l => l.interestLevel === 'HIGH').length}</span>
         </div>
       </div>
     </div>

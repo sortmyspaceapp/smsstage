@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import SvgEditor from './components/SvgEditor';
 import SvgUpload from './components/SvgUpload';
 import UserManagement from './components/UserManagement';
 import Analytics from './components/Analytics';
 import Leads from './components/Leads';
+import CustomerDashboard from './components/CustomerDashboard';
 import FloorSelectionModal from './components/FloorSelectionModal';
 import FloorManagementModal from './components/FloorManagementModal';
+import ConfirmDialog from './components/ConfirmDialog';
+import CityForm from './components/CityForm';
+import MallForm from './components/MallForm';
+import SpaceForm from './components/SpaceForm';
+import QRLogin from './components/QRLogin';
 import './App.css';
-
-// Configure axios base URL
-axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'https://smsstage.ceartech.com/api';
+import api from './config/axios';
 
 interface User {
   id: string;
@@ -77,13 +80,14 @@ interface Mall {
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [loginMode, setLoginMode] = useState<'password' | 'qr'>('password');
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [malls, setMalls] = useState<Mall[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
-  
+
   // SVG components state
   const [showSvgEditor, setShowSvgEditor] = useState(false);
   const [showSvgUpload, setShowSvgUpload] = useState(false);
@@ -94,16 +98,22 @@ const App: React.FC = () => {
   const [showFloorManagement, setShowFloorManagement] = useState(false);
   const [selectedMallForFloors, setSelectedMallForFloors] = useState<Mall | null>(null);
   const [selectedAction, setSelectedAction] = useState<'upload' | 'edit'>('upload');
-  
-  // User management state
-  const [showUserManagement, setShowUserManagement] = useState(false);
-  
-  // Analytics state
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  
-  // Leads state
-  const [showLeads, setShowLeads] = useState(false);
-  
+
+  // CRUD state management
+  const [showCityForm, setShowCityForm] = useState(false);
+  const [showMallForm, setShowMallForm] = useState(false);
+  const [showSpaceForm, setShowSpaceForm] = useState(false);
+  const [editingCity, setEditingCity] = useState<City | null>(null);
+  const [editingMall, setEditingMall] = useState<Mall | null>(null);
+  const [editingSpace, setEditingSpace] = useState<Space | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<() => void>(() => { });
+  const [confirmMessage, setConfirmMessage] = useState({ title: '', message: '' });
+  const [sectors, setSectors] = useState<any[]>([]);
+
+
+
+
   // Notification state
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -112,22 +122,22 @@ const App: React.FC = () => {
 
   // Login form state
   const [loginForm, setLoginForm] = useState({
-    email: 'admin@spacefinder.com',
+    emailOrUsername: 'admin@spacefinder.com',
     password: 'admin123'
   });
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // Check if user is already logged in
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       fetchUserProfile();
     }
   }, []);
 
   const fetchUserProfile = async () => {
     try {
-      const response = await axios.get('/user/profile');
+      const response = await api.get('/api/user/profile');
       setUser(response.data.data.user);
       setIsLoggedIn(true);
     } catch (error) {
@@ -142,12 +152,11 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      const response = await axios.post('/auth/login', loginForm);
+      const response = await api.post('/api/auth/login', loginForm);
       const { token, user } = response.data.data;
-      
+
       localStorage.setItem('token', token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
+
       setUser(user);
       setIsLoggedIn(true);
     } catch (error: any) {
@@ -157,9 +166,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleQRLoginSuccess = (user: User, token: string, refreshToken: string) => {
+    localStorage.setItem('token', token);
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    }
+    setUser(user);
+    setIsLoggedIn(true);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
     setIsLoggedIn(false);
     setUser(null);
     setSpaces([]);
@@ -169,7 +186,7 @@ const App: React.FC = () => {
 
   const fetchSpaces = async () => {
     try {
-      const response = await axios.get('/spaces/search');
+      const response = await api.get('/api/spaces/search');
       setSpaces(response.data.data.spaces);
     } catch (error) {
       console.error('Failed to fetch spaces:', error);
@@ -178,7 +195,7 @@ const App: React.FC = () => {
 
   const fetchMalls = async () => {
     try {
-      const response = await axios.get('/malls');
+      const response = await api.get('/api/malls');
       setMalls(response.data.data.malls);
     } catch (error) {
       console.error('Failed to fetch malls:', error);
@@ -187,7 +204,7 @@ const App: React.FC = () => {
 
   const fetchCities = async () => {
     try {
-      const response = await axios.get('/cities');
+      const response = await api.get('/api/cities');
       setCities(response.data.data.cities);
     } catch (error) {
       console.error('Failed to fetch cities:', error);
@@ -196,13 +213,104 @@ const App: React.FC = () => {
 
   const fetchDashboardData = async () => {
     await Promise.all([fetchSpaces(), fetchMalls(), fetchCities()]);
+    // Fetch sectors separately - don't block if endpoint doesn't exist
+    fetchSectors().catch(() => console.log('Sectors endpoint not available'));
   };
+
+  const fetchSectors = async () => {
+    try {
+      const response = await api.get('/api/sectors');
+      setSectors(response.data.data.sectors);
+    } catch (error) {
+      console.error('Failed to fetch sectors:', error);
+    }
+  };
+
+  // CRUD Handlers for Cities
+  const handleDeleteCity = (city: City) => {
+    setConfirmMessage({
+      title: 'Delete City',
+      message: `Are you sure you want to delete "${city.name}"? This action cannot be undone.`
+    });
+    setConfirmAction(() => async () => {
+      try {
+        await api.delete(`/api/cities/${city.id}`);
+        await fetchCities();
+        setShowConfirmDialog(false);
+      } catch (error: any) {
+        alert(error.response?.data?.error || 'Failed to delete city');
+      }
+    });
+    setShowConfirmDialog(true);
+  };
+
+  const handleEditCity = (city: City) => {
+    setEditingCity(city);
+    setShowCityForm(true);
+  };
+
+  const handleAddCity = () => {
+    setEditingCity(null);
+    setShowCityForm(true);
+  };
+
+  // CRUD Handlers for Malls
+  const handleDeleteMall = (mall: Mall) => {
+    setConfirmMessage({
+      title: 'Delete Mall',
+      message: `Are you sure you want to delete "${mall.name}"? This will also delete all associated floors and spaces.`
+    });
+    setConfirmAction(() => async () => {
+      try {
+        await api.delete(`/api/malls/${mall.id}`);
+        await fetchMalls();
+        setShowConfirmDialog(false);
+      } catch (error: any) {
+        alert(error.response?.data?.error || 'Failed to delete mall');
+      }
+    });
+    setShowConfirmDialog(true);
+  };
+
+  const handleEditMall = (mall: Mall) => {
+    setEditingMall(mall);
+    setShowMallForm(true);
+  };
+
+  const handleAddMall = () => {
+    setEditingMall(null);
+    setShowMallForm(true);
+  };
+
+  // CRUD Handlers for Spaces
+  const handleDeleteSpace = (space: Space) => {
+    setConfirmMessage({
+      title: 'Delete Space',
+      message: `Are you sure you want to delete "${space.name}"? This action cannot be undone.`
+    });
+    setConfirmAction(() => async () => {
+      try {
+        await api.delete(`/api/spaces/${space.id}`);
+        await fetchSpaces();
+        setShowConfirmDialog(false);
+      } catch (error: any) {
+        alert(error.response?.data?.error || 'Failed to delete space');
+      }
+    });
+    setShowConfirmDialog(true);
+  };
+
+  const handleEditSpace = (space: Space) => {
+    setEditingSpace(space);
+    setShowSpaceForm(true);
+  };
+
 
   // Notification functions
   const fetchNotificationCount = async () => {
     try {
       setNotificationRefreshing(true);
-      const response = await axios.get('/notifications/count?unreadOnly=true');
+      const response = await api.get('/api/notifications/count?unreadOnly=true');
       setUnreadCount(response.data.data.count);
     } catch (error) {
       console.error('Failed to fetch notification count:', error);
@@ -214,7 +322,7 @@ const App: React.FC = () => {
   const fetchNotifications = async () => {
     try {
       setNotificationRefreshing(true);
-      const response = await axios.get('/notifications');
+      const response = await api.get('/api/notifications');
       setNotifications(response.data.data.notifications);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
@@ -225,8 +333,8 @@ const App: React.FC = () => {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      await axios.patch(`/notifications/${notificationId}/read`);
-      setNotifications(prev => prev.map(notification => 
+      await api.patch(`/api/notifications/${notificationId}/read`);
+      setNotifications(prev => prev.map(notification =>
         notification.id === notificationId ? { ...notification, isRead: true } : notification
       ));
       fetchNotificationCount();
@@ -237,7 +345,7 @@ const App: React.FC = () => {
 
   const markAllAsRead = async () => {
     try {
-      await axios.patch('/notifications/read-all');
+      await api.patch('/api/notifications/read-all');
       setNotifications(prev => prev.map(notification => ({ ...notification, isRead: true })));
       setUnreadCount(0);
     } catch (error) {
@@ -278,10 +386,10 @@ const App: React.FC = () => {
 
   const handleFloorSelect = (floorId: string, action: 'upload' | 'edit') => {
     if (!selectedMallForFloors) return;
-    
+
     setSelectedMallId(selectedMallForFloors.id);
     setSelectedFloorId(floorId);
-    
+
     if (action === 'upload') {
       setShowSvgUpload(true);
     } else {
@@ -318,35 +426,60 @@ const App: React.FC = () => {
       const interval = setInterval(() => {
         fetchNotificationCount();
         fetchNotifications();
-      }, 5000); // Check every 5 seconds for faster updates
+      }, 30000); // Check every 30 seconds to avoid rate limiting
 
       return () => clearInterval(interval);
     }
   }, [isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Show customer dashboard for customer users
+  if (isLoggedIn && user?.role === 'CUSTOMER') {
+    return <CustomerDashboard user={user} onLogout={handleLogout} />;
+  }
+
   if (!isLoggedIn) {
+    // Show QR login for customers, password login for others
+    if (loginMode === 'qr') {
+      return (
+        <QRLogin
+          onLoginSuccess={handleQRLoginSuccess}
+          onSwitchToPassword={() => setLoginMode('password')}
+        />
+      );
+    }
+
     return (
       <div className="login-container">
         <div className="login-card">
           <h1>SpaceFinder Admin Dashboard</h1>
           <form onSubmit={handleLogin}>
             <div className="form-group">
-              <label>Email:</label>
+              <label>Email or Username:</label>
               <input
-                type="email"
-                value={loginForm.email}
-                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                type="text"
+                value={loginForm.emailOrUsername}
+                onChange={(e) => setLoginForm({ ...loginForm, emailOrUsername: e.target.value })}
                 required
               />
             </div>
             <div className="form-group">
               <label>Password:</label>
-              <input
-                type="password"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                required
-              />
+              <div className="password-input-wrapper">
+                <input
+                  type={showLoginPassword ? "text" : "password"}
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                >
+                  {showLoginPassword ? '👁️' : '👁️‍🗨️'}
+                </button>
+              </div>
             </div>
             {error && <div className="error-message">{error}</div>}
             <button type="submit" disabled={loading}>
@@ -358,6 +491,22 @@ const App: React.FC = () => {
             <p><strong>Admin:</strong> admin@spacefinder.com / admin123</p>
             <p><strong>Customer:</strong> customer@spacefinder.com / customer123</p>
           </div>
+          <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
+            <button
+              type="button"
+              onClick={() => setLoginMode('qr')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#667eea',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontSize: '0.875rem',
+              }}
+            >
+              Login with QR Code instead
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -368,22 +517,22 @@ const App: React.FC = () => {
       <header className="dashboard-header">
         <h1>SpaceFinder Admin Dashboard</h1>
         <div className="header-actions">
-        <div className="notification-container">
-          <button 
-            className={`notification-bell ${notificationRefreshing ? 'refreshing' : ''}`}
-            onClick={() => {
-              setShowNotifications(!showNotifications);
-              if (!showNotifications) {
-                fetchNotifications();
-              }
-            }}
-          >
-            {notificationRefreshing ? '🔄' : '🔔'}
-            {unreadCount > 0 && (
-              <span className="notification-badge">{unreadCount}</span>
-            )}
-          </button>
-            
+          <div className="notification-container">
+            <button
+              className={`notification-bell ${notificationRefreshing ? 'refreshing' : ''}`}
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                if (!showNotifications) {
+                  fetchNotifications();
+                }
+              }}
+            >
+              {notificationRefreshing ? '🔄' : '🔔'}
+              {unreadCount > 0 && (
+                <span className="notification-badge">{unreadCount}</span>
+              )}
+            </button>
+
             {/* Notifications Popup */}
             {showNotifications && (
               <div className="notifications-popup">
@@ -393,8 +542,8 @@ const App: React.FC = () => {
                     <button onClick={markAllAsRead} className="mark-all-read-btn">
                       Mark All Read
                     </button>
-                    <button 
-                      onClick={() => setShowNotifications(false)} 
+                    <button
+                      onClick={() => setShowNotifications(false)}
                       className="close-notifications-btn"
                     >
                       ×
@@ -406,8 +555,8 @@ const App: React.FC = () => {
                     <p className="no-notifications">No notifications</p>
                   ) : (
                     notifications.map(notification => (
-                      <div 
-                        key={notification.id} 
+                      <div
+                        key={notification.id}
                         className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
                         onClick={() => !notification.isRead && markAsRead(notification.id)}
                       >
@@ -426,7 +575,7 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
-          
+
           <div className="user-info">
             <span>Welcome, {user?.profile?.firstName || user?.email}</span>
             <button onClick={handleLogout}>Logout</button>
@@ -434,281 +583,276 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <nav className="dashboard-nav">
-        <button 
-          className={activeTab === 'dashboard' ? 'active' : ''}
-          onClick={() => setActiveTab('dashboard')}
-        >
-          Dashboard
-        </button>
-        <button 
-          className={activeTab === 'spaces' ? 'active' : ''}
-          onClick={() => setActiveTab('spaces')}
-        >
-          Spaces
-        </button>
-        <button 
-          className={activeTab === 'malls' ? 'active' : ''}
-          onClick={() => setActiveTab('malls')}
-        >
-          Malls
-        </button>
-        <button 
-          className={activeTab === 'cities' ? 'active' : ''}
-          onClick={() => setActiveTab('cities')}
-        >
-          Cities
-        </button>
-        <button 
-          className={activeTab === 'users' ? 'active' : ''}
-          onClick={() => setActiveTab('users')}
-        >
-          Users
-        </button>
-        <button 
-          className={activeTab === 'analytics' ? 'active' : ''}
-          onClick={() => setActiveTab('analytics')}
-        >
-          Analytics
-        </button>
-        <button 
-          className={activeTab === 'leads' ? 'active' : ''}
-          onClick={() => setActiveTab('leads')}
-        >
-          Leads
-        </button>
-      </nav>
+      <div className="dashboard-layout">
+        <aside className="dashboard-sidebar">
+          <nav className="sidebar-nav">
+            <button
+              className={activeTab === 'dashboard' ? 'active' : ''}
+              onClick={() => setActiveTab('dashboard')}
+            >
+              <span className="nav-icon">📊</span>
+              <span className="nav-label">Dashboard</span>
+            </button>
+            <button
+              className={activeTab === 'spaces' ? 'active' : ''}
+              onClick={() => setActiveTab('spaces')}
+            >
+              <span className="nav-icon">🏢</span>
+              <span className="nav-label">Spaces</span>
+            </button>
+            <button
+              className={activeTab === 'malls' ? 'active' : ''}
+              onClick={() => setActiveTab('malls')}
+            >
+              <span className="nav-icon">🏬</span>
+              <span className="nav-label">Malls</span>
+            </button>
+            <button
+              className={activeTab === 'cities' ? 'active' : ''}
+              onClick={() => setActiveTab('cities')}
+            >
+              <span className="nav-icon">🌆</span>
+              <span className="nav-label">Cities</span>
+            </button>
+            <button
+              className={activeTab === 'users' ? 'active' : ''}
+              onClick={() => setActiveTab('users')}
+            >
+              <span className="nav-icon">👥</span>
+              <span className="nav-label">Users</span>
+            </button>
+            <button
+              className={activeTab === 'analytics' ? 'active' : ''}
+              onClick={() => setActiveTab('analytics')}
+            >
+              <span className="nav-icon">📈</span>
+              <span className="nav-label">Analytics</span>
+            </button>
+            <button
+              className={activeTab === 'leads' ? 'active' : ''}
+              onClick={() => setActiveTab('leads')}
+            >
+              <span className="nav-icon">🎯</span>
+              <span className="nav-label">Leads</span>
+            </button>
+          </nav>
+        </aside>
 
-      <main className="dashboard-content">
-        {activeTab === 'dashboard' && (
-          <div className="dashboard-overview">
-            <h2>Dashboard Overview</h2>
-            <div className="stats-grid">
-              <div className="stat-card">
-                <h3>Total Spaces</h3>
-                <p className="stat-number">{spaces.length}</p>
-              </div>
-              <div className="stat-card">
-                <h3>Available Spaces</h3>
-                <p className="stat-number">
-                  {spaces.filter(space => space.availability === 'AVAILABLE').length}
-                </p>
-              </div>
-              <div className="stat-card">
-                <h3>Total Cities</h3>
-                <p className="stat-number">{cities.length}</p>
-              </div>
-              <div className="stat-card">
-                <h3>Total Malls</h3>
-                <p className="stat-number">{malls.length}</p>
+        <main className="dashboard-content">
+          {activeTab === 'dashboard' && (
+            <div className="dashboard-overview">
+              <h2>Dashboard Overview</h2>
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <h3>Total Spaces</h3>
+                  <p className="stat-number">{spaces.length}</p>
+                </div>
+                <div className="stat-card">
+                  <h3>Available Spaces</h3>
+                  <p className="stat-number">
+                    {spaces.filter(space => space.availability === 'AVAILABLE').length}
+                  </p>
+                </div>
+                <div className="stat-card">
+                  <h3>Total Cities</h3>
+                  <p className="stat-number">{cities.length}</p>
+                </div>
+                <div className="stat-card">
+                  <h3>Total Malls</h3>
+                  <p className="stat-number">{malls.length}</p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'spaces' && (
-          <div className="spaces-section">
-            <h2>Spaces Management</h2>
-            <button onClick={fetchSpaces} className="refresh-btn">Refresh Data</button>
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>Size (sq ft)</th>
-                    <th>Price (₹/month)</th>
-                    <th>Availability</th>
-                    <th>Mall</th>
-                    <th>City</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {spaces.map(space => (
-                    <tr key={space.id}>
-                      <td>{space.name}</td>
-                      <td>{space.type}</td>
-                      <td>{space.size}</td>
-                      <td>₹{space.price.toLocaleString()}</td>
-                      <td>
-                        <span className={`status ${space.availability.toLowerCase()}`}>
-                          {space.availability}
-                        </span>
-                      </td>
-                      <td>{space.mall.name}</td>
-                      <td>{space.mall.city}</td>
+          {activeTab === 'spaces' && (
+            <div className="spaces-section">
+              <h2>Spaces Management</h2>
+              <button onClick={fetchSpaces} className="refresh-btn">Refresh Data</button>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Type</th>
+                      <th>Size (sq ft)</th>
+                      <th>Price (₹/month)</th>
+                      <th>Availability</th>
+                      <th>Mall</th>
+                      <th>City</th>
+                      {(user?.role === 'ADMIN' || user?.role === 'MALL_MANAGER') && <th>Actions</th>}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'malls' && (
-          <div className="malls-section">
-            <h2>Malls Management</h2>
-            <button onClick={fetchMalls} className="refresh-btn">Refresh Data</button>
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Address</th>
-                    <th>City</th>
-                    <th>Sector</th>
-                    <th>Rating</th>
-                    <th>Floors</th>
-                    <th>Manager</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {malls.map(mall => {
-                    console.log('Mall data:', mall.name, 'Floors:', mall.floors);
-                    return (
-                    <tr key={mall.id}>
-                      <td>{mall.name}</td>
-                      <td>{mall.address}</td>
-                      <td>{mall.city.name}, {mall.city.state}</td>
-                      <td>{mall.sector.name}</td>
-                      <td>{mall.rating}/5</td>
-                      <td>{mall.floors.length}</td>
-                      <td>
-                        {mall.manager ? (
-                          `${mall.manager.profile?.firstName || ''} ${mall.manager.profile?.lastName || ''}`.trim() || mall.manager.email
-                        ) : (
-                          'No Manager'
+                  </thead>
+                  <tbody>
+                    {spaces.map(space => (
+                      <tr key={space.id}>
+                        <td>{space.name}</td>
+                        <td>{space.type}</td>
+                        <td>{space.size}</td>
+                        <td>₹{space.price.toLocaleString()}</td>
+                        <td>
+                          <span className={`status ${space.availability.toLowerCase()}`}>
+                            {space.availability}
+                          </span>
+                        </td>
+                        <td>{space.mall.name}</td>
+                        <td>{space.mall.city}</td>
+                        {(user?.role === 'ADMIN' || user?.role === 'MALL_MANAGER') && (
+                          <td>
+                            <div className="action-buttons">
+                              <button onClick={() => handleEditSpace(space)} className="edit-btn action-btn">Edit</button>
+                              <button onClick={() => handleDeleteSpace(space)} className="delete-btn action-btn">Delete</button>
+                            </div>
+                          </td>
                         )}
-                      </td>
-                      <td>
-                        <div className="action-buttons">
-                          <button 
-                            onClick={() => handleFloorSelection(mall, 'upload')}
-                            className="action-btn upload-btn"
-                          >
-                            Upload SVG
-                          </button>
-                          <button 
-                            onClick={() => handleFloorSelection(mall, 'edit')}
-                            className="action-btn edit-btn"
-                          >
-                            Edit SVG
-                          </button>
-                          <button 
-                            onClick={() => handleFloorManagement(mall)}
-                            className="action-btn manage-btn"
-                          >
-                            Manage Floors
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'cities' && (
-          <div className="cities-section">
-            <h2>Cities Management</h2>
-            <button onClick={fetchCities} className="refresh-btn">Refresh Data</button>
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>State</th>
-                    <th>Malls Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cities.map(city => (
-                    <tr key={city.id}>
-                      <td>{city.name}</td>
-                      <td>{city.state}</td>
-                      <td>{city.buildingsCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'users' && (
-          <div className="users-section">
-            <h2>User Management</h2>
-            <div className="user-actions">
-              <button 
-                onClick={() => setShowUserManagement(true)}
-                className="manage-users-btn"
-              >
-                Manage All Users
-              </button>
-            </div>
-            
-            <div className="user-profile">
-              <h3>Current User Profile</h3>
-              <div className="profile-info">
-                <p><strong>Email:</strong> {user?.email}</p>
-                <p><strong>Role:</strong> {user?.role}</p>
-                {user?.profile && (
-                  <>
-                    <p><strong>Name:</strong> {user.profile.firstName} {user.profile.lastName}</p>
-                    <p><strong>Phone:</strong> {user.profile.phone}</p>
-                  </>
-                )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'analytics' && (
-          <div className="analytics-section">
-            <h2>Analytics Dashboard</h2>
-            <button 
-              onClick={() => setShowAnalytics(true)}
-              className="view-analytics-btn"
-            >
-              View Detailed Analytics
-            </button>
-            <div className="analytics-preview">
-              <p>View comprehensive analytics including:</p>
-              <ul>
-                <li>Daily activity trends</li>
-                <li>Top performing spaces</li>
-                <li>User engagement metrics</li>
-                <li>Conversion rates</li>
-              </ul>
+          {activeTab === 'malls' && (
+            <div className="malls-section">
+              <h2>Malls Management</h2>
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                {user?.role === 'ADMIN' && (
+                  <button onClick={handleAddMall} className="add-btn action-btn">+ Add Mall</button>
+                )}
+                <button onClick={fetchMalls} className="refresh-btn">Refresh Data</button>
+              </div>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Address</th>
+                      <th>City</th>
+                      <th>Sector</th>
+                      <th>Rating</th>
+                      <th>Floors</th>
+                      <th>Manager</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {malls.map(mall => {
+                      console.log('Mall data:', mall.name, 'Floors:', mall.floors);
+                      return (
+                        <tr key={mall.id}>
+                          <td>{mall.name}</td>
+                          <td>{mall.address}</td>
+                          <td>{mall.city.name}, {mall.city.state}</td>
+                          <td>{mall.sector.name}</td>
+                          <td>{mall.rating}/5</td>
+                          <td>{mall.floors.length}</td>
+                          <td>
+                            {mall.manager ? (
+                              `${mall.manager.profile?.firstName || ''} ${mall.manager.profile?.lastName || ''}`.trim() || mall.manager.email
+                            ) : (
+                              'No Manager'
+                            )}
+                          </td>
+                          <td>
+                            <div className="action-buttons">
+                              {(user?.role === 'ADMIN' || user?.role === 'MALL_MANAGER') && (
+                                <>
+                                  <button onClick={() => handleEditMall(mall)} className="edit-btn action-btn">Edit</button>
+                                  {user?.role === 'ADMIN' && (
+                                    <button onClick={() => handleDeleteMall(mall)} className="delete-btn action-btn">Delete</button>
+                                  )}
+                                </>
+                              )}
+                              <button
+                                onClick={() => handleFloorSelection(mall, 'upload')}
+                                className="action-btn upload-btn"
+                              >
+                                Upload SVG
+                              </button>
+                              <button
+                                onClick={() => handleFloorSelection(mall, 'edit')}
+                                className="action-btn edit-btn"
+                              >
+                                Edit SVG
+                              </button>
+                              <button
+                                onClick={() => handleFloorManagement(mall)}
+                                className="action-btn manage-btn"
+                              >
+                                Manage Floors
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'leads' && (
-          <div className="leads-section">
-            <h2>Leads Management</h2>
-            <button 
-              onClick={() => setShowLeads(true)}
-              className="view-leads-btn"
-            >
-              View All Leads
-            </button>
-            <div className="leads-preview">
-              <p>Manage user interests and leads including:</p>
-              <ul>
-                <li>User interest tracking</li>
-                <li>Space inquiry management</li>
-                <li>Real-time notifications</li>
-                <li>Lead conversion tracking</li>
-              </ul>
+          {activeTab === 'cities' && (
+            <div className="cities-section">
+              <h2>Cities Management</h2>
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                {user?.role === 'ADMIN' && (
+                  <button onClick={handleAddCity} className="add-btn action-btn">+ Add City</button>
+                )}
+                <button onClick={fetchCities} className="refresh-btn">Refresh Data</button>
+              </div>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>State</th>
+                      <th>Malls Count</th>
+                      {user?.role === 'ADMIN' && <th>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cities.map(city => (
+                      <tr key={city.id}>
+                        <td>{city.name}</td>
+                        <td>{city.state}</td>
+                        <td>{city.buildingsCount}</td>
+                        {user?.role === 'ADMIN' && (
+                          <td>
+                            <div className="action-buttons">
+                              <button onClick={() => handleEditCity(city)} className="edit-btn action-btn">Edit</button>
+                              <button onClick={() => handleDeleteCity(city)} className="delete-btn action-btn">Delete</button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
-      </main>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="users-section">
+              <UserManagement onClose={() => { }} />
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="analytics-section">
+              <Analytics onClose={() => { }} />
+            </div>
+          )}
+
+          {activeTab === 'leads' && (
+            <div className="leads-section">
+              <Leads onClose={() => { }} />
+            </div>
+          )}
+        </main>
+      </div>
 
       {/* SVG Components */}
       {showSvgUpload && selectedMallId && selectedFloorId && (
@@ -737,26 +881,6 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* User Management Component */}
-      {showUserManagement && (
-        <UserManagement
-          onClose={() => setShowUserManagement(false)}
-        />
-      )}
-
-      {/* Analytics Component */}
-      {showAnalytics && (
-        <Analytics
-          onClose={() => setShowAnalytics(false)}
-        />
-      )}
-
-      {/* Leads Component */}
-      {showLeads && (
-        <Leads
-          onClose={() => setShowLeads(false)}
-        />
-      )}
 
       {/* Floor Selection Modal */}
       {showFloorSelection && selectedMallForFloors && (
@@ -787,6 +911,51 @@ const App: React.FC = () => {
           onFloorsUpdate={handleFloorsUpdate}
         />
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={showConfirmDialog}
+        title={confirmMessage.title}
+        message={confirmMessage.message}
+        onConfirm={confirmAction}
+        onCancel={() => setShowConfirmDialog(false)}
+        confirmText="Delete"
+      />
+
+      {/* City Form Modal */}
+      <CityForm
+        isOpen={showCityForm}
+        onClose={() => {
+          setShowCityForm(false);
+          setEditingCity(null);
+        }}
+        onSuccess={fetchCities}
+        editingCity={editingCity}
+      />
+
+      {/* Mall Form Modal */}
+      <MallForm
+        isOpen={showMallForm}
+        onClose={() => {
+          setShowMallForm(false);
+          setEditingMall(null);
+        }}
+        onSuccess={fetchMalls}
+        editingMall={editingMall}
+        cities={cities}
+        sectors={sectors}
+      />
+
+      {/* Space Form Modal */}
+      <SpaceForm
+        isOpen={showSpaceForm}
+        onClose={() => {
+          setShowSpaceForm(false);
+          setEditingSpace(null);
+        }}
+        onSuccess={fetchSpaces}
+        editingSpace={editingSpace}
+      />
     </div>
   );
 };

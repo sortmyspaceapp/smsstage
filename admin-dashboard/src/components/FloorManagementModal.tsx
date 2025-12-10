@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../config/axios';
 
 interface Floor {
   id: string;
@@ -44,7 +44,7 @@ const FloorManagementModal: React.FC<FloorManagementModalProps> = ({
       setLoading(true);
       setError(null);
 
-      const response = await axios.post('/floors', {
+      const response = await api.post('/api/floors', {
         mallId,
         floorNumber: newFloor.floorNumber,
         name: newFloor.name.trim()
@@ -78,7 +78,7 @@ const FloorManagementModal: React.FC<FloorManagementModalProps> = ({
       setLoading(true);
       setError(null);
 
-      const response = await axios.delete(`/floors/${floorId}`);
+      const response = await api.delete(`/api/floors/${floorId}`);
 
       if (response.data.success) {
         setSuccess('Floor deleted successfully!');

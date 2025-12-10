@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../config/axios';
 
 interface SvgUploadProps {
   mallId: string;
@@ -63,7 +63,7 @@ const SvgUpload: React.FC<SvgUploadProps> = ({ mallId, floorId, onUploadSuccess,
       formData.append('mallId', mallId);
       formData.append('floorId', floorId);
 
-      const response = await axios.post('/svg/upload', formData, {
+      const response = await api.post('/api/svg/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

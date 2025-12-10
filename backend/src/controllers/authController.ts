@@ -136,7 +136,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // Determine if emailOrUsername is an email or username
     const isEmail = emailOrUsername.includes('@');
-    
+
     // Find user with profile
     const user = await prisma.user.findUnique({
       where: isEmail ? { email: emailOrUsername } : { username: emailOrUsername },
@@ -146,11 +146,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     });
 
     if (!user || !user.isActive) {
+      // Debug logging
+      logger.info(`Login attempt for ${emailOrUsername}: user=${!!user}, isActive=${user?.isActive}`);
+
       // Log failed login attempt
       if (user) {
         await NotificationService.createLoginFailedNotification(user.id, user.email, ipAddress);
       }
-      
+
       res.status(401).json({
         success: false,
         error: 'Invalid credentials'
@@ -159,11 +162,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Check password
+    logger.info(`Checking password for user: ${user.email}, role: ${user.role}`);
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    logger.info(`Password valid: ${isPasswordValid}`);
+
     if (!isPasswordValid) {
       // Log failed login attempt
       await NotificationService.createLoginFailedNotification(user.id, user.email, ipAddress);
-      
+
       res.status(401).json({
         success: false,
         error: 'Invalid credentials'

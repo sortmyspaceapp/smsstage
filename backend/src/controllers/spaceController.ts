@@ -215,6 +215,7 @@ export const getSpaceById = async (req: Request, res: Response): Promise<void> =
           },
           amenities: space.amenities,
           images: space.images,
+          contactDetails: space.contactDetails,
           stats: {
             views: space._count.recentViews,
             interested: space._count.interestedSpaces

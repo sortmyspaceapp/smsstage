@@ -171,12 +171,12 @@ export const getRecentViews = async (req: AuthRequest, res: Response) => {
           include: {
             floor: {
               include: {
-            mall: {
-              include: {
-                city: true,
-                sector: true
-              }
-            }
+                mall: {
+                  include: {
+                    city: true,
+                    sector: true
+                  }
+                }
               }
             },
             images: {
@@ -248,12 +248,12 @@ export const getInterestedSpaces = async (req: AuthRequest, res: Response) => {
           include: {
             floor: {
               include: {
-            mall: {
-              include: {
-                city: true,
-                sector: true
-              }
-            }
+                mall: {
+                  include: {
+                    city: true,
+                    sector: true
+                  }
+                }
               }
             },
             images: {
@@ -453,7 +453,7 @@ export const getAllUsers = async (req: any, res: any): Promise<void> => {
     const skip = (Number(page) - 1) * Number(limit);
 
     const where: any = {};
-    
+
     if (search) {
       where.OR = [
         { email: { contains: search as string, mode: 'insensitive' } },
@@ -461,7 +461,7 @@ export const getAllUsers = async (req: any, res: any): Promise<void> => {
         { profile: { lastName: { contains: search as string, mode: 'insensitive' } } }
       ];
     }
-    
+
     if (role) {
       where.role = role as string;
     }
@@ -645,6 +645,120 @@ export const deleteUser = async (req: any, res: any): Promise<void> => {
   } catch (error) {
     logger.error('Delete user error:', error);
     res.status(500).json({ success: false, error: 'Failed to delete user' });
+    return;
+  }
+};
+
+// Reset user password (Admin only)
+export const resetUserPassword = async (req: any, res: any): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword) {
+      res.status(400).json({ success: false, error: 'New password is required' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      res.status(400).json({ success: false, error: 'Password must be at least 6 characters long' });
+      return;
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
+
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user's password
+    await prisma.user.update({
+      where: { id },
+      data: {
+        passwordHash: hashedPassword
+      }
+    });
+
+    logger.info(`Password reset for user: ${id} by admin: ${req.user?.id}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+    return;
+  } catch (error) {
+    logger.error('Reset user password error:', error);
+    res.status(500).json({ success: false, error: 'Failed to reset password' });
+    return;
+  }
+};
+
+// Change own password
+export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ success: false, error: 'Current and new passwords are required' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      res.status(400).json({ success: false, error: 'New password must be at least 6 characters long' });
+      return;
+    }
+
+    // Get user to verify current password
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isPasswordValid) {
+      res.status(400).json({ success: false, error: 'Incorrect current password' });
+      return;
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: hashedPassword
+      }
+    });
+
+    // Log password change activity
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    await ActivityService.logPasswordChange(userId, ipAddress, userAgent);
+
+    logger.info(`Password changed for user: ${userId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+    return;
+  } catch (error) {
+    logger.error('Change password error:', error);
+    res.status(500).json({ success: false, error: 'Failed to change password' });
     return;
   }
 };

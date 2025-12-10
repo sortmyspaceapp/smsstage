@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import api from '../config/axios';
 
 interface Space {
   id: string;
@@ -35,6 +35,7 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
   const [error, setError] = useState<string | null>(null);
   const [refreshLoading, setRefreshLoading] = useState(false);
   const [refreshSuccess, setRefreshSuccess] = useState(false);
+  const svgWrapperRef = useRef<HTMLDivElement>(null);
 
   // Space form state
   const [spaceForm, setSpaceForm] = useState({
@@ -50,7 +51,7 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
     try {
       setLoading(true);
       console.log('Loading SVG data for floor:', floorId);
-      const response = await axios.get(`/svg/floor/${floorId}`);
+      const response = await api.get(`/api/svg/floor/${floorId}`);
       console.log('SVG data response:', response.data);
       setSvgContent(response.data.data.svgContent);
       setSpaces(response.data.data.spaces);
@@ -89,7 +90,7 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
     }
   };
 
-  // Extract all clickable elements from SVG content (only map_ elements)
+  // Extract all clickable elements from SVG content (map_ and shop_ elements)
   const getClickableElements = () => {
     if (!svgContent) return [];
     
@@ -97,10 +98,13 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
     const idRegex = /id="([^"]+)"/g;
     let match;
     
+    // Exclude non-clickable elements
+    const excludedIds = ['outline', 'background_fill', 'image', 'staircase', 'staircase_2', 'circular_staircase_1', 'circular_staircase_2', 'circular_staircase_3', 'circular_staircase_4', 'lines_corridar', 'corridor', 'Open_Patio', 'entrance_door-2'];
+    
     while ((match = idRegex.exec(svgContent)) !== null) {
       const id = match[1];
-      // Only include map_ elements (store areas)
-      if (id !== 'outline' && id.startsWith('map_')) {
+      // Include map_ and shop_ elements (store areas), but exclude non-clickable elements
+      if (!excludedIds.includes(id) && (id.startsWith('map_') || id.startsWith('shop_'))) {
         elementIds.push(id);
       }
     }
@@ -127,9 +131,11 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
       // Generate a descriptive default name from the element ID
       let defaultName = elementId;
       
-      // Handle map_ prefix
+      // Handle map_ and shop_ prefixes
       if (elementId.startsWith('map_')) {
         defaultName = elementId.replace('map_', '');
+      } else if (elementId.startsWith('shop_')) {
+        defaultName = elementId.replace('shop_', 'Shop ');
       }
       
       // Convert underscores to spaces and capitalize words
@@ -147,47 +153,76 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
   };
 
   const handleSvgClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    console.log('SVG clicked!', event.target);
-    const target = event.target as SVGElement;
-    const elementId = target.getAttribute('id');
-    console.log('Element ID:', elementId);
-    console.log('Target tag name:', target.tagName);
-    console.log('Target class name:', target.className);
+    let target = event.target as SVGElement;
     
-    // If the clicked element doesn't have an ID, try to find the parent element with an ID
-    let clickableElement: Element | null = target;
-    while (clickableElement && !clickableElement.getAttribute('id') && clickableElement.parentElement) {
-      clickableElement = clickableElement.parentElement;
+    // Ignore clicks on background images, text, and other non-interactive elements
+    if (target.tagName === 'image' || target.tagName === 'text' || target.tagName === 'tspan') {
+      // Check if it's inside a clickable group
+      let parent = target.parentElement;
+      let foundClickableParent = false;
+      while (parent && parent !== event.currentTarget) {
+        const parentId = parent.getAttribute('id');
+        if (parentId && (parentId.startsWith('map_') || parentId.startsWith('shop_'))) {
+          // Found a clickable parent, use that
+          target = parent as unknown as SVGElement;
+          foundClickableParent = true;
+          break;
+        }
+        if (parent.tagName === 'svg' || parent.classList.contains('svg-wrapper')) {
+          return; // Reached the wrapper, no clickable element found
+        }
+        parent = parent.parentElement;
+      }
+      if (!foundClickableParent) {
+        return; // No clickable parent found
+      }
     }
     
-    const finalElementId = clickableElement.getAttribute('id');
-    if (finalElementId !== elementId) {
-      console.log('Found parent element with ID:', finalElementId);
-    }
+    let elementId = target.getAttribute('id');
     
     // Helper function to check if an element should be clickable
-    const isClickableElement = (id: string) => {
-      // Only exclude the outline element
-      if (id === 'outline') {
-        console.log('Element is outline - not clickable');
+    const isClickableElement = (id: string | null): boolean => {
+      if (!id) return false;
+      
+      // Exclude non-clickable elements
+      const excludedIds = ['outline', 'background_fill', 'image', 'staircase', 'staircase_2', 'circular_staircase_1', 'circular_staircase_2', 'circular_staircase_3', 'circular_staircase_4', 'lines_corridar', 'corridor', 'Open_Patio', 'entrance_door-2'];
+      if (excludedIds.includes(id)) {
         return false;
       }
       
-      // ONLY map_ elements are clickable (store areas)
-      if (id.startsWith('map_')) {
-        console.log('Element is map_ - clickable:', id);
-        return true;
-      }
-      
-      console.log('Element is not map_ - not clickable:', id);
-      return false;
+      // map_ and shop_ elements are clickable (store areas)
+      return id.startsWith('map_') || id.startsWith('shop_');
     };
     
-    const idToUse = finalElementId || elementId;
-    if (idToUse && isClickableElement(idToUse)) {
-      console.log('Setting selected element:', idToUse);
-      setSelectedElement(idToUse);
-      const space = spaces.find(s => s.svgElementId === idToUse);
+    // If the clicked element doesn't have a clickable ID, traverse up to find parent with clickable ID
+    let clickableElement: Element | null = target;
+    let foundId: string | null = null;
+    
+    // First check if current element is clickable
+    if (elementId && isClickableElement(elementId)) {
+      foundId = elementId;
+    } else {
+      // Traverse up the DOM tree to find a clickable parent
+      while (clickableElement && clickableElement.parentElement) {
+        clickableElement = clickableElement.parentElement;
+        const parentId = clickableElement.getAttribute('id');
+        
+        if (parentId && isClickableElement(parentId)) {
+          foundId = parentId;
+          break;
+        }
+        
+        // Stop if we've reached the SVG wrapper
+        if (clickableElement.tagName === 'svg' || clickableElement.classList.contains('svg-wrapper')) {
+          break;
+        }
+      }
+    }
+    
+    if (foundId) {
+      console.log('Setting selected element:', foundId);
+      setSelectedElement(foundId);
+      const space = spaces.find(s => s.svgElementId === foundId);
       setSelectedSpace(space || null);
       
       if (space) {
@@ -201,13 +236,15 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
           description: ''
         });
       } else {
-        console.log('Creating new space for:', idToUse);
+        console.log('Creating new space for:', foundId);
         // Generate a descriptive default name from the element ID
-        let defaultName = idToUse;
+        let defaultName = foundId;
         
-        // Handle map_ prefix
-        if (idToUse.startsWith('map_')) {
-          defaultName = idToUse.replace('map_', '');
+        // Handle map_ and shop_ prefixes
+        if (foundId.startsWith('map_')) {
+          defaultName = foundId.replace('map_', '');
+        } else if (foundId.startsWith('shop_')) {
+          defaultName = foundId.replace('shop_', 'Shop ');
         }
         
         // Convert underscores to spaces and capitalize words
@@ -223,7 +260,7 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
         });
       }
     } else {
-      console.log('Element not clickable or no ID');
+      console.log('Element not clickable or no ID found');
     }
   };
 
@@ -235,13 +272,13 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
       
       if (selectedSpace) {
         // Update existing space
-        await axios.put(`/svg/space/${selectedSpace.id}/assignment`, {
+        await api.put(`/api/svg/space/${selectedSpace.id}/assignment`, {
           svgElementId: selectedElement,
           ...spaceForm
         });
       } else {
         // Create new space
-        await axios.post('/spaces', {
+        await api.post('/api/spaces', {
           floorId,
           svgElementId: selectedElement,
           ...spaceForm
@@ -264,7 +301,7 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
 
     try {
       setLoading(true);
-      await axios.delete(`/spaces/${selectedSpace.id}`);
+      await api.delete(`/api/spaces/${selectedSpace.id}`);
       await loadSvgData(); // Reload data
       setSelectedSpace(null);
       setSelectedElement(null);
@@ -287,104 +324,165 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
     }
   };
 
-  const highlightSvgElements = (svg: string) => {
-    let highlightedSvg = svg;
-    console.log('Highlighting SVG elements...');
-    console.log('Spaces count:', spaces.length);
-    console.log('Selected element:', selectedElement);
+  // Function to highlight SVG elements
+  const highlightSvgElements = useCallback((svg: string) => {
+    if (!svg) return '';
     
-    // First, make the outline non-clickable
-    highlightedSvg = highlightedSvg.replace(
-      /id="outline"/g,
-      'id="outline" style="fill:none;stroke:#000;stroke-width:2;pointer-events:none;"'
-    );
+    // Use DOM parser for better manipulation
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svg, 'image/svg+xml');
+    const svgElement = doc.querySelector('svg');
     
-    // Find all elements with IDs
+    if (!svgElement) return svg;
+    
+    // Exclude non-clickable elements
+    const excludedIds = ['outline', 'background_fill', 'image', 'staircase', 'staircase_2', 'circular_staircase_1', 'circular_staircase_2', 'circular_staircase_3', 'circular_staircase_4', 'lines_corridar', 'corridor', 'Open_Patio', 'entrance_door-2'];
+    
+    // Get all clickable element IDs (map_ and shop_)
+    const allElementIds: string[] = [];
     const idRegex = /id="([^"]+)"/g;
     let match;
-    const elementIds: string[] = [];
-    
     while ((match = idRegex.exec(svg)) !== null) {
-      elementIds.push(match[1]);
+      const id = match[1];
+      if (!excludedIds.includes(id) && (id.startsWith('map_') || id.startsWith('shop_'))) {
+        allElementIds.push(id);
+      }
     }
     
-    console.log('Found elements with IDs:', elementIds);
-    
-    // Process each element - ONLY MAP_ ELEMENTS
-    elementIds.forEach(id => {
-      // Skip outline element
-      if (id === 'outline') return;
-      
-      // ONLY process elements with map_ prefix (store areas)
-      if (!id.startsWith('map_')) return;
-      
-      console.log('Processing map element:', id);
+    // Process each clickable element
+    allElementIds.forEach(id => {
+      const element = doc.getElementById(id);
+      if (!element) return;
       
       // Check if this element has an existing space
       const existingSpace = spaces.find(space => space.svgElementId === id);
       
-      // Determine colors
-      let fillColor, strokeColor;
+      // Determine colors based on availability status
+      let fillColor: string;
+      let strokeColor: string;
       
       if (existingSpace) {
         fillColor = getAvailabilityColor(existingSpace.availabilityStatus);
         strokeColor = fillColor;
-        console.log('Existing space:', id, 'color:', fillColor);
       } else {
         fillColor = '#E0E0E0';
         strokeColor = '#CCCCCC';
-        console.log('New space:', id, 'color:', fillColor);
       }
       
-      // Simple style application
-      const newStyle = `fill:${fillColor};fill-opacity:0.6;stroke:${strokeColor};stroke-width:2;cursor:pointer;pointer-events:all;`;
+      // Style the element directly (SVG is normalized, no <g> groups to handle)
+      // Set attributes - these will be preserved in the serialized SVG
+      element.setAttribute('fill', fillColor);
+      element.setAttribute('fill-opacity', '0.6');
+      element.setAttribute('stroke', strokeColor);
+      element.setAttribute('stroke-width', '2');
+      element.setAttribute('fill-rule', 'nonzero');
+      element.setAttribute('class', 'interactive-space');
       
-      // Add style to element
-      highlightedSvg = highlightedSvg.replace(
-        new RegExp(`id="${id}"`, 'g'),
-        `id="${id}" style="${newStyle}"`
-      );
+      // Set inline styles as a string in the style attribute (this gets serialized properly)
+      let styleString = `fill: ${fillColor} !important; fill-opacity: 0.6 !important; stroke: ${strokeColor} !important; stroke-width: 2px !important; cursor: pointer !important; pointer-events: all !important;`;
+      
+      // Highlight selected element
+      if (selectedElement === id) {
+        element.setAttribute('class', 'interactive-space selected');
+        element.setAttribute('stroke-width', '4');
+        element.setAttribute('stroke', '#FFD700');
+        styleString = `fill: ${fillColor} !important; fill-opacity: 0.6 !important; stroke: #FFD700 !important; stroke-width: 4px !important; cursor: pointer !important; pointer-events: all !important;`;
+      }
+      
+      element.setAttribute('style', styleString);
     });
-
-    // Add selected class to the currently selected element
-    if (selectedElement) {
-      highlightedSvg = highlightedSvg.replace(
-        new RegExp(`id="${selectedElement}"`, 'g'),
-        `id="${selectedElement}" class="selected"`
-      );
+    
+    // Make outline non-clickable
+    const outlineElement = doc.getElementById('outline');
+    if (outlineElement) {
+      outlineElement.setAttribute('style', 'fill:none;stroke:#000;stroke-width:2;pointer-events:none;');
     }
+    
+    return new XMLSerializer().serializeToString(doc);
+  }, [spaces, selectedElement]);
 
-    console.log('SVG processing complete');
-    return highlightedSvg;
-  };
+  // Memoize the highlighted SVG to prevent unnecessary re-renders when hovering over list
+  const highlightedSvg = useMemo(() => {
+    if (!svgContent) return '';
+    return highlightSvgElements(svgContent);
+  }, [svgContent, highlightSvgElements]);
 
-  // After rendering the SVG, normalize geometry of map_ paths so fill covers full area
+  // Apply styles directly to DOM after render - this persists even when React re-renders
   useEffect(() => {
+    if (!svgWrapperRef.current) return;
+    
     try {
-      const svgEl = document.querySelector('.svg-wrapper svg');
+      const svgEl = svgWrapperRef.current.querySelector('svg') as SVGSVGElement;
       if (!svgEl) return;
-      const mapPaths = svgEl.querySelectorAll('path[id^="map_"]');
-      mapPaths.forEach((el) => {
+      
+      // Handle direct path elements with map_ or shop_ IDs
+      const clickablePaths = svgEl.querySelectorAll('path[id^="map_"], path[id^="shop_"]');
+      clickablePaths.forEach((el) => {
         const pathEl = el as SVGPathElement;
+        const elementId = pathEl.getAttribute('id');
+        if (!elementId) return;
+
+        // Normalize path geometry (only once)
         const d = pathEl.getAttribute('d');
-        if (!d) return;
-        // Many provided paths encode an outer and inner contour to draw a frame.
-        // Trim to the first closed subpath so the interior is filled and clickable.
-        const firstCloseIdx = d.search(/[Zz]/);
-        if (firstCloseIdx > -1 && firstCloseIdx < d.length - 1) {
-          const trimmed = d.slice(0, firstCloseIdx + 1);
-          if (trimmed && trimmed.length > 1) {
-            pathEl.setAttribute('d', trimmed);
+        if (d && !pathEl.hasAttribute('data-normalized')) {
+          // Many provided paths encode an outer and inner contour to draw a frame.
+          // Trim to the first closed subpath so the interior is filled and clickable.
+          const firstCloseIdx = d.search(/[Zz]/);
+          if (firstCloseIdx > -1 && firstCloseIdx < d.length - 1) {
+            const trimmed = d.slice(0, firstCloseIdx + 1);
+            if (trimmed && trimmed.length > 1) {
+              pathEl.setAttribute('d', trimmed);
+              pathEl.setAttribute('data-normalized', 'true');
+            }
           }
         }
+
         // Ensure proper fill handling and pointer events
         pathEl.setAttribute('fill-rule', 'nonzero');
         pathEl.style.pointerEvents = 'all';
+        pathEl.style.cursor = 'pointer';
+
+        // Apply colors based on space availability status
+        const existingSpace = spaces.find(space => space.svgElementId === elementId);
+        
+        let fillColor: string;
+        let strokeColor: string;
+        
+        if (existingSpace) {
+          fillColor = getAvailabilityColor(existingSpace.availabilityStatus);
+          strokeColor = fillColor;
+        } else {
+          fillColor = '#E0E0E0';
+          strokeColor = '#CCCCCC';
+        }
+
+        // Set fill and stroke with !important to ensure they persist
+        pathEl.style.setProperty('fill', fillColor, 'important');
+        pathEl.style.setProperty('fill-opacity', '0.6', 'important');
+        pathEl.style.setProperty('stroke', strokeColor, 'important');
+        pathEl.style.setProperty('stroke-width', '2', 'important');
+        
+        // Also set as attributes as backup
+        pathEl.setAttribute('fill', fillColor);
+        pathEl.setAttribute('fill-opacity', '0.6');
+        pathEl.setAttribute('stroke', strokeColor);
+        pathEl.setAttribute('stroke-width', '2');
+
+        // Highlight selected element
+        if (selectedElement === elementId) {
+          pathEl.style.setProperty('stroke-width', '4', 'important');
+          pathEl.style.setProperty('stroke', '#FFD700', 'important');
+          pathEl.setAttribute('stroke-width', '4');
+          pathEl.setAttribute('stroke', '#FFD700');
+          pathEl.setAttribute('class', 'interactive-space selected');
+        } else {
+          pathEl.setAttribute('class', 'interactive-space');
+        }
       });
-    } catch (_) {
-      // no-op
+    } catch (error) {
+      console.error('Error processing SVG paths:', error);
     }
-  }, [svgContent, spaces, selectedElement]);
+  }, [highlightedSvg, spaces, selectedElement]);
 
   if (loading && !svgContent) {
     return (
@@ -428,9 +526,10 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
         <div className="svg-editor-content">
           <div className="svg-container">
             <div 
+              ref={svgWrapperRef}
               className="svg-wrapper"
               dangerouslySetInnerHTML={{ 
-                __html: highlightSvgElements(svgContent) 
+                __html: highlightedSvg
               }}
               onClick={handleSvgClick}
             />

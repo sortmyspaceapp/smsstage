@@ -22,6 +22,7 @@ import activityRoutes from './routes/activity';
 import floorRoutes from './routes/floor';
 import notificationRoutes from './routes/notification';
 import leadsRoutes from './routes/leads';
+import qrAuthRoutes from './routes/qrAuth';
 
 // Load environment variables
 dotenv.config();
@@ -64,12 +65,12 @@ app.use(helmet({
 }));
 
 // CORS configuration - Environment specific
-const allowedOrigins = process.env.NODE_ENV === 'production' 
+const allowedOrigins = process.env.NODE_ENV === 'production'
   ? [
-      process.env.FRONTEND_URL,
-      process.env.ADMIN_URL,
-      process.env.MOBILE_APP_URL
-    ].filter((url): url is string => Boolean(url))
+    process.env.FRONTEND_URL,
+    process.env.ADMIN_URL,
+    process.env.MOBILE_APP_URL
+  ].filter((url): url is string => Boolean(url))
   : true; // Allow all origins in development
 
 app.use(cors({
@@ -90,19 +91,25 @@ const limiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     // Skip rate limiting for health checks
-    return req.path === '/health';
+    if (req.path === '/health') return true;
+
+    // Skip rate limiting for localhost in development
+    const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+    const isDevelopment = process.env.NODE_ENV === 'development';
+
+    return isLocalhost && isDevelopment;
   }
 });
 
 app.use(limiter);
 
 // Body parsing middleware with size limits
-app.use(express.json({ 
+app.use(express.json({
   limit: process.env.MAX_REQUEST_SIZE || '10mb',
   strict: true
 }));
-app.use(express.urlencoded({ 
-  extended: true, 
+app.use(express.urlencoded({
+  extended: true,
   limit: process.env.MAX_REQUEST_SIZE || '10mb',
   parameterLimit: 1000
 }));
@@ -137,6 +144,7 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/floors', floorRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/leads', leadsRoutes);
+app.use('/api/qr-auth', qrAuthRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
