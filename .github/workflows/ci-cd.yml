@@ -1,10 +1,8 @@
 name: SpaceFinder CI/CD Pipeline
 
+# CI/CD Pipeline Disabled - Only manual runs allowed
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:  # Only allow manual runs via GitHub UI
 
 env:
   REGISTRY: docker.io
