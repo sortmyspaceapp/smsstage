@@ -391,7 +391,7 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
       
       element.setAttribute('style', styleString);
     });
-    
+
     // Make outline non-clickable
     const outlineElement = doc.getElementById('outline');
     if (outlineElement) {
@@ -425,13 +425,13 @@ const SvgEditor: React.FC<SvgEditorProps> = ({ mallId, floorId, onClose, refresh
         // Normalize path geometry (only once)
         const d = pathEl.getAttribute('d');
         if (d && !pathEl.hasAttribute('data-normalized')) {
-          // Many provided paths encode an outer and inner contour to draw a frame.
-          // Trim to the first closed subpath so the interior is filled and clickable.
-          const firstCloseIdx = d.search(/[Zz]/);
-          if (firstCloseIdx > -1 && firstCloseIdx < d.length - 1) {
-            const trimmed = d.slice(0, firstCloseIdx + 1);
-            if (trimmed && trimmed.length > 1) {
-              pathEl.setAttribute('d', trimmed);
+        // Many provided paths encode an outer and inner contour to draw a frame.
+        // Trim to the first closed subpath so the interior is filled and clickable.
+        const firstCloseIdx = d.search(/[Zz]/);
+        if (firstCloseIdx > -1 && firstCloseIdx < d.length - 1) {
+          const trimmed = d.slice(0, firstCloseIdx + 1);
+          if (trimmed && trimmed.length > 1) {
+            pathEl.setAttribute('d', trimmed);
               pathEl.setAttribute('data-normalized', 'true');
             }
           }

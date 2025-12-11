@@ -577,7 +577,7 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ user, onLogout })
                                                                     }}
                                                                 >
                                                                     {status}
-                                                                </span>
+                                                        </span>
                                                             );
                                                         })()}
                                                     </div>

@@ -204,7 +204,7 @@ const FloorMap: React.FC<FloorMapProps> = ({ floorId, floorName, onSpaceClick })
         if (!onSpaceClick) return;
 
         e.stopPropagation(); // Prevent event bubbling
-        
+
         let target = e.target as Element | null;
         
         // Exclude non-clickable elements
@@ -242,12 +242,12 @@ const FloorMap: React.FC<FloorMapProps> = ({ floorId, floorName, onSpaceClick })
             if (elementId && !excludedIds.includes(elementId)) {
                 // Only check for map_ and shop_ elements
                 if (elementId.startsWith('map_') || elementId.startsWith('shop_')) {
-                    const space = spaces.find(s => s.svgElementId === elementId);
-                    if (space) {
+                const space = spaces.find(s => s.svgElementId === elementId);
+                if (space) {
                         e.preventDefault();
                         e.stopPropagation();
-                        onSpaceClick(space);
-                        return;
+                    onSpaceClick(space);
+                    return;
                     }
                 }
             }
